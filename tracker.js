@@ -256,7 +256,6 @@ function renderItemCards(memberId) {
 
         const memberQty = memberItems[item.id] || 0;
         const bagQty = getAccountBagQty(item.id);
-        const totalItemMeso = memberQty * item.price;
         const hasQty = memberQty > 0;
 
         return `
@@ -270,7 +269,7 @@ function renderItemCards(memberId) {
                         <span class="item-arabic-name">${item.nameAr}</span>
                         <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
                             <span class="item-price-chip ${item.priceType}">
-                                🏷️ ${item.badge} (~${formatNumber(item.price)})
+                                🏷️ ${item.badge}
                             </span>
                             <span class="account-bag-badge" id="bag-badge-${memberId}-${item.id}" title="رصيد شنطة اللعبة المشتركة الآن">
                                 🎒 في الشنطة: <strong id="bag-val-${item.id}">${formatNumber(bagQty)}</strong>
@@ -309,7 +308,7 @@ function renderItemCards(memberId) {
                         ➕ أزرار (+/-)
                     </button>
                     <span class="card-total-meso" id="meso-${memberId}-${item.id}" style="font-size: 0.85rem; font-weight: 800; color: var(--accent-gold);">
-                        ${formatNumber(totalItemMeso)} ميسو
+                        ${item.id === 'raw_meso' ? `${formatNumber(memberQty)} ميسو كاش` : `${formatNumber(memberQty)} قطعة`}
                     </span>
                 </div>
 
@@ -416,7 +415,7 @@ function updateSingleItemUI(memberId, itemId, qty) {
     if (itemObj) {
         const mesoEl = document.getElementById(`meso-${memberId}-${itemId}`);
         if (mesoEl) {
-            mesoEl.innerText = `${formatNumber(qty * itemObj.price)} ميسو`;
+            mesoEl.innerText = itemObj.id === 'raw_meso' ? `${formatNumber(qty)} ميسو كاش` : `${formatNumber(qty)} قطعة`;
         }
     }
 
@@ -455,10 +454,10 @@ function updateCalculations() {
         ITEM_CATALOG.forEach(item => {
             const qty = memberItems[item.id] || 0;
             if (qty > 0) {
-                // Raw meso is counted 1:1, others multiply by price
-                const val = qty * item.price;
-                memberMeso += val;
-                if (item.id !== 'raw_meso') {
+                // Real cash meso only from sales or raw cash; items are items only!
+                if (item.id === 'raw_meso') {
+                    memberMeso += qty;
+                } else {
                     memberItemsCount += qty;
                 }
 
@@ -475,11 +474,11 @@ function updateCalculations() {
         const itemsEl = document.getElementById(`member-items-${member.id}`);
         const mesoEl = document.getElementById(`member-meso-${member.id}`);
         if (itemsEl) itemsEl.innerText = `${formatNumber(memberItemsCount)} قطعة`;
-        if (mesoEl) mesoEl.innerText = formatMesoCompact(memberMeso);
+        if (mesoEl) mesoEl.innerText = `${formatMesoCompact(memberMeso)} كاش`;
 
         // Update column card total
         const colTotalEl = document.getElementById(`column-total-${member.id}`);
-        if (colTotalEl) colTotalEl.innerText = formatMesoCompact(memberMeso);
+        if (colTotalEl) colTotalEl.innerText = `${formatMesoCompact(memberMeso)} كاش`;
     });
 
     // 1. UPDATE MASTER GRAND TOTAL CARD
@@ -567,11 +566,10 @@ function updateMasterTable(aggregates, totalMeso) {
         return;
     }
 
-    // Sort by total meso descending, then by totalQty
-    itemsList.sort((a, b) => (b.totalQty * b.price) - (a.totalQty * a.price) || (b.totalQty - a.totalQty));
+    // Sort purely by totalQty descending
+    itemsList.sort((a, b) => b.totalQty - a.totalQty);
 
     tbody.innerHTML = itemsList.map(item => {
-        const itemTotalMeso = item.totalQty * item.price;
         const mohamedQty = item.byMember['mohamed'] || 0;
         const amyQty = item.byMember['amy'] || 0;
         const abdoQty = item.byMember['abdo'] || 0;
@@ -587,11 +585,9 @@ function updateMasterTable(aggregates, totalMeso) {
                         </div>
                     </div>
                 </td>
-                <td style="color: var(--accent-gold); font-weight: 800;">~${formatNumber(item.price)}</td>
                 <td style="font-size: 1.1rem; font-weight: 900; color: var(--accent-cyan);">
                     ${formatNumber(item.totalQty)} قطعة
                 </td>
-                <td style="font-weight: 900; color: var(--accent-gold);">${formatMesoCompact(itemTotalMeso)}</td>
                 <td>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.82rem;">
                         <span style="color: #38bdf8; font-weight: 800;">محمد: ${mohamedQty}</span> | 
@@ -601,7 +597,7 @@ function updateMasterTable(aggregates, totalMeso) {
                 </td>
                 <td style="text-align: center;">
                     ${item.id !== 'raw_meso' ? (item.totalQty > 0 ? 
-                        `<button class="btn-table-sell" onclick="openGrandSellModal('${item.id}')" title="بيع وتصفير هذا العنصر من المخزن الكلي بالكامل وتوزيع الميسو كاش على الفريق">💰 بيع المخزن وتوزيع الميسو</button>` : 
+                        `<button class="btn-table-sell" onclick="openGrandSellModal('${item.id}')" title="بيع وتصفير هذا العنصر من المخزن الكلي وتحديد سعر البيع لتحويله لميسو">💰 بيع وتحديد السعر</button>` : 
                         `<span style="color: var(--text-muted); font-size: 0.78rem;">المخزن فارغ</span>`
                     ) : '<span style="color: var(--accent-gold); font-weight: 800;">كاش ميسو مباشر</span>'}
                 </td>
@@ -633,8 +629,8 @@ function updateColumnLists() {
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <input type="number" class="column-item-qty-input" value="${qty}" onchange="setDirectQty('${member.id}', '${item.id}', this.value)">
-                        <span style="font-size: 0.8rem; color: var(--accent-gold); font-weight: 800; min-width: 70px; text-align: left;">
-                            ${formatMesoCompact(qty * item.price)}
+                        <span style="font-size: 0.8rem; color: var(--accent-cyan); font-weight: 800; min-width: 60px; text-align: left;">
+                            ${item.id === 'raw_meso' ? `${formatNumber(qty)} كاش` : `${formatNumber(qty)} قطعة`}
                         </span>
                     </div>
                 </div>
@@ -756,7 +752,7 @@ function copyMemberReport(memberId) {
     const memberObj = TEAM_MEMBERS.find(m => m.id === memberId);
     const memberItems = appState.members[memberId]?.items || {};
     
-    let totalMeso = 0;
+    let totalMesoCash = memberItems['raw_meso'] || 0;
     let totalQty = 0;
     let lines = [`📊 تقرير فارمينج MapleLand - ${memberObj.name} (${memberObj.role})`];
     lines.push(`📅 التاريخ: ${new Date().toLocaleDateString('ar-EG')}`);
@@ -764,17 +760,15 @@ function copyMemberReport(memberId) {
 
     ITEM_CATALOG.forEach(item => {
         const qty = memberItems[item.id] || 0;
-        if (qty > 0) {
-            const val = qty * item.price;
-            totalMeso += val;
+        if (qty > 0 && item.id !== 'raw_meso') {
             totalQty += qty;
-            lines.push(`▫️ ${item.nameKo} (${item.nameAr}): ${formatNumber(qty)} قطعة = ${formatNumber(val)} ميسو`);
+            lines.push(`▫️ ${item.nameKo} (${item.nameAr}): ${formatNumber(qty)} قطعة`);
         }
     });
 
     lines.push(`---------------------------------`);
-    lines.push(`📦 إجمالي القطع: ${formatNumber(totalQty)} قطعة`);
-    lines.push(`💰 إجمالي ثروة الميسو: ${formatNumber(totalMeso)} ميسو (~${formatMesoCompact(totalMeso)})`);
+    lines.push(`📦 إجمالي القطع المخزنة: ${formatNumber(totalQty)} قطعة`);
+    lines.push(`💰 رصيد الكاش المحصل من المبيعات: ${formatNumber(totalMesoCash)} ميسو (~${formatMesoCompact(totalMesoCash)})`);
     lines.push(`---------------------------------`);
     lines.push(`🔥 تم التوليد عبر MapleLand Team Tracker`);
 
@@ -787,34 +781,33 @@ function copyMemberReport(memberId) {
 function copyTeamReport() {
     let grandTotalMeso = 0;
     let grandTotalItems = 0;
-    let lines = [`🏆 تقرير المحصلة الكلية لفريق فارمينج MapleLand 🏆`];
-    lines.push(`👥 الفريق: محمد | طنط ايمي | عبدالرحمن`);
+    let lines = [`🏆 تقرير المحصلة الكلية لمخزن MapleLand 🏆`];
+    lines.push(`👥 أعضاء الفريق: ${TEAM_MEMBERS.map(m => m.name).join(' | ')}`);
     lines.push(`📅 التاريخ: ${new Date().toLocaleDateString('ar-EG')}`);
     lines.push(`=================================`);
 
     TEAM_MEMBERS.forEach(m => {
-        let memberMeso = 0;
         let memberItems = 0;
         const items = appState.members[m.id]?.items || {};
+        const memberCash = items['raw_meso'] || 0;
 
         ITEM_CATALOG.forEach(i => {
             const q = items[i.id] || 0;
-            if (q > 0) {
-                memberMeso += q * i.price;
-                if (i.id !== 'raw_meso') memberItems += q;
+            if (q > 0 && i.id !== 'raw_meso') {
+                memberItems += q;
             }
         });
 
-        grandTotalMeso += memberMeso;
+        grandTotalMeso += memberCash;
         grandTotalItems += memberItems;
-        lines.push(`👤 ${m.name}: ${formatNumber(memberItems)} قطعة | ${formatMesoCompact(memberMeso)}`);
+        lines.push(`👤 ${m.name}: ${formatNumber(memberItems)} قطعة بالمخزن | رصيد كاش: ${formatNumber(memberCash)} ميسو`);
     });
 
     lines.push(`=================================`);
-    lines.push(`📦 إجمالي دروبات الفريق ككل: ${formatNumber(grandTotalItems)} قطعة`);
-    lines.push(`💰 إجمالي ميسو الفريق المحصل: ${formatNumber(grandTotalMeso)} ميسو (~${formatMesoCompact(grandTotalMeso)})`);
+    lines.push(`📦 إجمالي القطع في مخزن الفريق: ${formatNumber(grandTotalItems)} قطعة`);
+    lines.push(`💰 إجمالي الميسو الكاش الفعلي المحصل: ${formatNumber(grandTotalMeso)} ميسو (~${formatMesoCompact(grandTotalMeso)})`);
     lines.push(`=================================`);
-    lines.push(`✨ شركة المرعبين المحدودة - MapleLand`);
+    lines.push(`✨ MapleLand Team Tracker`);
 
     const text = lines.join('\n');
     navigator.clipboard.writeText(text).then(() => {
@@ -1245,8 +1238,52 @@ function closeShiftHistoryModal() {
 }
 
 // 22. SMART BATCH SALE & PAYOUT SYSTEM
-function openGrandSellModal(itemId) {
+function openUniversalSellModal(defaultItemId) {
+    const modal = document.getElementById('sell-modal');
+    if (!modal) return;
+
+    // Get list of all items that exist in warehouse
+    const availableItems = ITEM_CATALOG.filter(item => {
+        if (item.id === 'raw_meso') return false;
+        let total = 0;
+        TEAM_MEMBERS.forEach(m => {
+            total += (appState.members[m.id]?.items?.[item.id] || 0);
+        });
+        return total > 0;
+    });
+
+    if (availableItems.length === 0) {
+        alert("المخزن الكلي فارغ حالياً! لا توجد أي عناصر مسجلة لبيعها.");
+        return;
+    }
+
+    const selectEl = document.getElementById('sell-item-select');
+    const selectWrap = document.getElementById('sell-item-select-wrap');
+
+    if (selectEl) {
+        selectEl.innerHTML = availableItems.map(item => {
+            let total = 0;
+            TEAM_MEMBERS.forEach(m => {
+                total += (appState.members[m.id]?.items?.[item.id] || 0);
+            });
+            return `<option value="${item.id}">${item.nameKo} (${item.nameAr}) - متوفر: ${formatNumber(total)} قطعة</option>`;
+        }).join('');
+    }
+
+    const targetItemId = defaultItemId || availableItems[0].id;
+    if (selectEl) selectEl.value = targetItemId;
+    if (selectWrap) selectWrap.style.display = 'block';
+
+    openSellModal(targetItemId);
+}
+
+function onUniversalItemSelect(itemId) {
+    if (!itemId) return;
     openSellModal(itemId);
+}
+
+function openGrandSellModal(itemId) {
+    openUniversalSellModal(itemId);
 }
 
 function openSellModal(itemId) {
@@ -1278,8 +1315,10 @@ function openSellModal(itemId) {
     // Default inputs: sell ALL totalContributed pieces in warehouse to zero it out!
     const initialQty = totalContributed > 0 ? totalContributed : 1;
     document.getElementById('sell-input-qty').value = initialQty;
-    document.getElementById('sell-input-unit-price').value = itemObj.price;
-    document.getElementById('sell-input-total-price').value = initialQty * itemObj.price;
+    
+    // Price starts EMPTY - user MUST enter real selling price!
+    document.getElementById('sell-input-unit-price').value = '';
+    document.getElementById('sell-input-total-price').value = '';
 
     onSellInputsChange('qty');
     modal.classList.add('open');
@@ -1304,13 +1343,18 @@ function onSellInputsChange(changedField) {
     let total = parseInt(document.getElementById('sell-input-total-price').value, 10);
     if (isNaN(total) || total < 0) total = 0;
 
-    if (changedField === 'unit' || changedField === 'qty') {
+    if (changedField === 'unit') {
         total = qty * unit;
-        document.getElementById('sell-input-total-price').value = total;
+        document.getElementById('sell-input-total-price').value = total > 0 ? total : '';
     } else if (changedField === 'total') {
         if (qty > 0) {
             unit = Math.round(total / qty);
-            document.getElementById('sell-input-unit-price').value = unit;
+            document.getElementById('sell-input-unit-price').value = unit > 0 ? unit : '';
+        }
+    } else if (changedField === 'qty') {
+        if (unit > 0) {
+            total = qty * unit;
+            document.getElementById('sell-input-total-price').value = total > 0 ? total : '';
         }
     }
 
@@ -1328,6 +1372,15 @@ function onSellInputsChange(changedField) {
 
     if (totalContributed === 0) {
         payoutList.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; padding: 10px; text-align: center;">لا يملك أي عضو في الفريق حالياً كميات مسجلة من هذا العنصر.</div>`;
+        return;
+    }
+
+    if (total <= 0) {
+        payoutList.innerHTML = `
+            <div style="color: #fbbf24; background: rgba(245, 158, 11, 0.12); border: 1px dashed rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 12px; text-align: center; font-size: 0.88rem; font-weight: 700;">
+                ⚠️ اكتب سعر البيع الفعلي أعلاه (سعر القطعة أو إجمالي المبلغ) لحساب وتوزيع الميسو كاش على الفريق!
+            </div>
+        `;
         return;
     }
 
@@ -1356,9 +1409,9 @@ function onSellInputsChange(changedField) {
                     </div>
                 </div>
                 <div style="text-align: left;">
-                    <div class="payout-meso-amount">+${formatNumber(memberMesoShare)} ميسو</div>
+                    <div class="payout-meso-amount">+${formatNumber(memberMesoShare)} ميسو كاش</div>
                     <div style="font-size: 0.75rem; color: #f87171;">
-                        سيتم خصم: -${formatNumber(memberSoldShare)} قطعة
+                        سيتم تصفير/خصم: -${formatNumber(memberSoldShare)} قطعة
                     </div>
                 </div>
             </div>
@@ -1520,8 +1573,8 @@ function openMemberSellModal(memberId, itemId) {
 
     // Default: sell ALL of member's pieces
     document.getElementById('member-sell-input-qty').value = curMemberQty;
-    document.getElementById('member-sell-input-unit-price').value = itemObj.price;
-    document.getElementById('member-sell-input-total-price').value = curMemberQty * itemObj.price;
+    document.getElementById('member-sell-input-unit-price').value = '';
+    document.getElementById('member-sell-input-total-price').value = '';
 
     onMemberSellInputsChange('qty');
     modal.classList.add('open');
@@ -1554,24 +1607,34 @@ function onMemberSellInputsChange(changedField) {
     let total = parseInt(document.getElementById('member-sell-input-total-price').value, 10);
     if (isNaN(total) || total < 0) total = 0;
 
-    if (changedField === 'unit' || changedField === 'qty') {
+    if (changedField === 'unit') {
         total = qty * unit;
-        document.getElementById('member-sell-input-total-price').value = total;
+        document.getElementById('member-sell-input-total-price').value = total > 0 ? total : '';
     } else if (changedField === 'total') {
         if (qty > 0) {
             unit = Math.round(total / qty);
-            document.getElementById('member-sell-input-unit-price').value = unit;
+            document.getElementById('member-sell-input-unit-price').value = unit > 0 ? unit : '';
+        }
+    } else if (changedField === 'qty') {
+        if (unit > 0) {
+            total = qty * unit;
+            document.getElementById('member-sell-input-total-price').value = total > 0 ? total : '';
         }
     }
 
     const sumMeso = document.getElementById('member-sell-summary-meso');
-    if (sumMeso) sumMeso.innerText = `+${formatNumber(total)} ميسو`;
-
     const sumItems = document.getElementById('member-sell-summary-items');
-    if (sumItems) sumItems.innerText = `-${formatNumber(qty)} قطعة`;
-
     const sumBag = document.getElementById('member-sell-summary-bag');
-    if (sumBag) sumBag.innerText = `-${formatNumber(qty)} قطعة`;
+
+    if (total <= 0) {
+        if (sumMeso) sumMeso.innerText = 'بانتظار كتابة سعر البيع...';
+        if (sumItems) sumItems.innerText = `-${formatNumber(qty)} قطعة`;
+        if (sumBag) sumBag.innerText = `-${formatNumber(qty)} قطعة`;
+    } else {
+        if (sumMeso) sumMeso.innerText = `+${formatNumber(total)} ميسو كاش`;
+        if (sumItems) sumItems.innerText = `-${formatNumber(qty)} قطعة`;
+        if (sumBag) sumBag.innerText = `-${formatNumber(qty)} قطعة`;
+    }
 }
 
 function confirmExecuteMemberSale() {
@@ -1600,14 +1663,14 @@ function confirmExecuteMemberSale() {
     }
 
     if (isNaN(totalRevenue) || totalRevenue <= 0) {
-        alert("يرجى إدخال سعر بيع صحيح أكبر من 0.");
+        alert("يجب تحديد وكتابة سعر بيع صحيح أكبر من 0 قبل تأكيد البيع.");
         return;
     }
 
     const confirmMsg = 
         `هل أنت متأكد من بيع ${formatNumber(soldQty)} قطعة من (${itemObj.nameKo}) لحساب ${member.name} فقط؟\n\n` +
-        `• سيتم إضافة: +${formatNumber(totalRevenue)} ميسو كاش نقد في رصيد ${member.name}.\n` +
-        `• سيتم خصم: -${formatNumber(soldQty)} قطعة من دروبات ${member.name} ومن الشنطة والمحصلة الكلية.`;
+        `• سيتم إضافة: +${formatNumber(totalRevenue)} ميسو كاش نقد حقيقي في رصيد ${member.name}.\n` +
+        `• سيتم تصفير/خصم: -${formatNumber(soldQty)} قطعة من دروبات ${member.name} ومن الشنطة والمخزن الكلي.`;
 
     if (!confirm(confirmMsg)) return;
 

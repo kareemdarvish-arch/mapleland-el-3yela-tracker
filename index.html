@@ -37,6 +37,11 @@
                 📖 دليل اللعبة
             </a>
 
+            <!-- Universal Sell Button -->
+            <button class="btn-nav" onclick="openUniversalSellModal()" title="بيع أي عنصر من المخزن وتحديد سعر البيع لتحويله إلى ميسو كاش" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.45)); border-color: #f59e0b; color: #fbbf24; font-weight: 800; box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);">
+                💰 بيع عنصر
+            </button>
+
             <!-- Database Settings Modal Button -->
             <button class="btn-nav" onclick="openSettingsModal()" title="إعدادات قاعدة بيانات Firebase المجانية للربط بينكم">
                 🔥 قاعدة البيانات
@@ -100,7 +105,7 @@
                 <div class="master-stat-box total-meso">
                     <div class="master-stat-icon">💰</div>
                     <div class="master-stat-info">
-                        <div class="master-stat-label">إجمالي ثروة الفريق المقدرة بالميسو</div>
+                        <div class="master-stat-label">إجمالي رصيد الميسو الكاش الفعلي</div>
                         <div class="master-stat-num" id="master-total-meso">0 ميسو</div>
                     </div>
                 </div>
@@ -183,12 +188,10 @@
                     <table class="master-table">
                         <thead>
                             <tr>
-                                <th>العنصر</th>
-                                <th>سعر السوق</th>
-                                <th>إجمالي المخزن</th>
-                                <th>قيمة الميسو التقديرية</th>
-                                <th>توزيع الأعضاء في المخزن</th>
-                                <th style="text-align: center;">إجراء بيع وتصفير المخزن</th>
+                                <th>العنصر (دروب مسجل)</th>
+                                <th>إجمالي الكمية في المخزن</th>
+                                <th>توزيع القطع بين الأعضاء</th>
+                                <th style="text-align: center;">إجراء البيع وتحديد السعر</th>
                             </tr>
                         </thead>
                         <tbody id="master-table-body">
@@ -371,18 +374,26 @@
     <div class="modal-overlay" id="sell-modal" onclick="if(event.target===this) closeSellModal()">
         <div class="modal-content" style="max-width: 650px;">
             <div class="modal-header">
-                <h3>💰 بيع الدفعة وتقسيم الميسو على الفريق</h3>
+                <h3 id="sell-modal-title">💰 بيع من المخزن الكلي وتحديد سعر البيع</h3>
                 <button class="btn-modal-close" onclick="closeSellModal()" type="button">✕</button>
             </div>
             <div class="modal-body">
+                <!-- Item Selector Dropdown (when opened from navbar) -->
+                <div class="form-group" id="sell-item-select-wrap" style="margin-bottom: 14px;">
+                    <label for="sell-item-select" style="font-weight: 800; color: var(--accent-gold);">اختر العنصر المراد بيعه من المخزن الكلي:</label>
+                    <select id="sell-item-select" class="form-input" onchange="onUniversalItemSelect(this.value)" style="font-size: 0.95rem; padding: 10px 14px;">
+                        <!-- Options populated via JS -->
+                    </select>
+                </div>
+
                 <!-- Item summary banner -->
-                <div class="sell-item-banner">
+                <div class="sell-item-banner" id="sell-item-banner-box">
                     <img id="sell-item-icon" src="assets/icon_garnet_ore.png" alt="">
                     <div>
                         <h3 id="sell-item-name-ko" style="font-size: 1.2rem; color: #fff;">-</h3>
                         <div id="sell-item-name-ar" style="font-size: 0.85rem; color: var(--text-muted);">-</div>
                         <div style="font-size: 0.82rem; color: var(--accent-gold); font-weight: 800; margin-top: 4px;">
-                            🎒 الإجمالي المتاح في شنطة الإيميل: <strong id="sell-available-qty">0</strong> قطعة
+                            🎒 إجمالي الكمية في المخزن الكلي: <strong id="sell-available-qty">0</strong> قطعة
                         </div>
                     </div>
                 </div>
@@ -396,14 +407,14 @@
                         <input type="number" min="1" id="sell-input-qty" class="form-input" oninput="onSellInputsChange('qty')">
                     </div>
                     <div class="form-group">
-                        <label for="sell-input-unit-price">سعر بيع القطعة (ميسو):</label>
-                        <input type="number" min="1" id="sell-input-unit-price" class="form-input" oninput="onSellInputsChange('unit')">
+                        <label for="sell-input-unit-price" style="color: #fbbf24; font-weight: 800;">سعر بيع القطعة الفعلي (ميسو) *إجباري:</label>
+                        <input type="number" min="1" id="sell-input-unit-price" class="form-input" placeholder="اكتب سعر بيع القطعة..." oninput="onSellInputsChange('unit')">
                     </div>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 16px;">
-                    <label for="sell-input-total-price">أو إجمالي المبلغ المستلم بعد البيع بالكامل (ميسو):</label>
-                    <input type="number" min="1" id="sell-input-total-price" class="form-input" style="font-size: 1.15rem; color: var(--accent-gold); font-weight: 900;" oninput="onSellInputsChange('total')">
+                    <label for="sell-input-total-price" style="color: #fbbf24; font-weight: 800;">أو إجمالي المبلغ المحصل بالكامل (ميسو) *إجباري:</label>
+                    <input type="number" min="1" id="sell-input-total-price" class="form-input" placeholder="اكتب إجمالي ميسو البيع المستلم..." style="font-size: 1.15rem; color: var(--accent-gold); font-weight: 900;" oninput="onSellInputsChange('total')">
                 </div>
 
                 <!-- Live Payout Distribution Breakdown -->
@@ -469,14 +480,14 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="member-sell-input-unit-price">سعر بيع القطعة (ميسو):</label>
-                        <input type="number" min="1" id="member-sell-input-unit-price" class="form-input" oninput="onMemberSellInputsChange('unit')">
+                        <label for="member-sell-input-unit-price" style="color: #38bdf8; font-weight: 800;">سعر بيع القطعة الفعلي (ميسو) *إجباري:</label>
+                        <input type="number" min="1" id="member-sell-input-unit-price" class="form-input" placeholder="اكتب سعر بيع القطعة..." oninput="onMemberSellInputsChange('unit')">
                     </div>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 16px;">
-                    <label for="member-sell-input-total-price">إجمالي المبلغ المحصل بالميسو:</label>
-                    <input type="number" min="1" id="member-sell-input-total-price" class="form-input" style="font-size: 1.2rem; color: var(--accent-gold); font-weight: 900;" oninput="onMemberSellInputsChange('total')">
+                    <label for="member-sell-input-total-price" style="color: #38bdf8; font-weight: 800;">أو إجمالي المبلغ المحصل بالميسو *إجباري:</label>
+                    <input type="number" min="1" id="member-sell-input-total-price" class="form-input" placeholder="اكتب إجمالي ميسو البيع..." style="font-size: 1.2rem; color: var(--accent-gold); font-weight: 900;" oninput="onMemberSellInputsChange('total')">
                 </div>
 
                 <!-- Summary Breakdown Card -->
