@@ -301,7 +301,7 @@ function renderItemCards(memberId) {
 
                 <!-- Actions Row: Quick Fix & Manual Controls toggle -->
                 <div class="card-actions-row">
-                    ${item.id !== 'raw_meso' ? `<button class="btn-card-sell" onclick="openSellModal('${item.id}')" title="بيع الدفعة في المزاد أو المتجر وتقسيم الميسو كاش على الجميع">💰 بيع وتقسيم</button>` : ''}
+                    ${item.id !== 'raw_meso' ? `<button class="btn-card-sell" onclick="openMemberSellModal('${memberId}', '${item.id}')" title="بيع كمية ${member.name} وإيداع الميسو كاش في حسابه فقط">💰 بيع لحساب ${member.name}</button>` : ''}
                     <button class="btn-card-fix" onclick="openItemFixModal('${memberId}', '${item.id}')" title="تعديل مباشر في حال حدث خطأ أو كتبت رقم غلط">
                         ✏️ تصحيح خطأ
                     </button>
@@ -523,22 +523,54 @@ function updateCalculations() {
     updateColumnLists();
 }
 
+let warehouseOnlyAvailable = true;
+let warehouseSearchTerm = '';
+
+function onWarehouseSearch(term) {
+    warehouseSearchTerm = (term || '').toLowerCase().trim();
+    updateCalculations();
+}
+
+function toggleWarehouseFilter(onlyAvail, btnEl) {
+    warehouseOnlyAvailable = onlyAvail;
+    const chipAvail = document.getElementById('chip-avail');
+    const chipAll = document.getElementById('chip-all');
+    if (chipAvail && chipAll) {
+        chipAvail.classList.toggle('active', onlyAvail);
+        chipAll.classList.toggle('active', !onlyAvail);
+    }
+    updateCalculations();
+}
+
 function updateMasterTable(aggregates, totalMeso) {
     const tbody = document.getElementById('master-table-body');
     if (!tbody) return;
 
-    // Filter to items that have at least 1 collected
-    const collectedItems = Object.values(aggregates).filter(a => a.totalQty > 0);
+    let itemsList = Object.values(aggregates);
 
-    if (collectedItems.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">لم يتم جمع أي عناصر بعد. ابدأ بإضافة دروباتك في بروفايلك!</td></tr>`;
+    if (warehouseOnlyAvailable) {
+        itemsList = itemsList.filter(a => a.totalQty > 0);
+    }
+
+    if (warehouseSearchTerm) {
+        itemsList = itemsList.filter(a => 
+            a.nameKo.toLowerCase().includes(warehouseSearchTerm) || 
+            a.nameAr.toLowerCase().includes(warehouseSearchTerm)
+        );
+    }
+
+    if (itemsList.length === 0) {
+        const msg = warehouseOnlyAvailable 
+            ? "المخزن الكلي فارغ حالياً. بمجرد إضافة أي دروب في بروفايل أي عضو سيظهر هنا فوراً مع زر البيع والتصفير!" 
+            : "لا توجد نتائج مطابقة لبحثك في المخزن الكلي.";
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">${msg}</td></tr>`;
         return;
     }
 
-    // Sort by total meso descending
-    collectedItems.sort((a, b) => (b.totalQty * b.price) - (a.totalQty * a.price));
+    // Sort by total meso descending, then by totalQty
+    itemsList.sort((a, b) => (b.totalQty * b.price) - (a.totalQty * a.price) || (b.totalQty - a.totalQty));
 
-    tbody.innerHTML = collectedItems.map(item => {
+    tbody.innerHTML = itemsList.map(item => {
         const itemTotalMeso = item.totalQty * item.price;
         const mohamedQty = item.byMember['mohamed'] || 0;
         const amyQty = item.byMember['amy'] || 0;
@@ -556,15 +588,22 @@ function updateMasterTable(aggregates, totalMeso) {
                     </div>
                 </td>
                 <td style="color: var(--accent-gold); font-weight: 800;">~${formatNumber(item.price)}</td>
-                <td style="font-size: 1.1rem; font-weight: 900; color: var(--accent-cyan);">${formatNumber(item.totalQty)}</td>
+                <td style="font-size: 1.1rem; font-weight: 900; color: var(--accent-cyan);">
+                    ${formatNumber(item.totalQty)} قطعة
+                </td>
                 <td style="font-weight: 900; color: var(--accent-gold);">${formatMesoCompact(itemTotalMeso)}</td>
                 <td>
-                    <span style="color: #38bdf8; font-weight: 800;">محمد: ${mohamedQty}</span> | 
-                    <span style="color: #ec4899; font-weight: 800;">طنط ايمي: ${amyQty}</span> | 
-                    <span style="color: #f97316; font-weight: 800;">عبدالرحمن: ${abdoQty}</span>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.82rem;">
+                        <span style="color: #38bdf8; font-weight: 800;">محمد: ${mohamedQty}</span> | 
+                        <span style="color: #ec4899; font-weight: 800;">طنط ايمي: ${amyQty}</span> | 
+                        <span style="color: #f97316; font-weight: 800;">عبدالرحمن: ${abdoQty}</span>
+                    </div>
                 </td>
                 <td style="text-align: center;">
-                    ${item.id !== 'raw_meso' ? `<button class="btn-table-sell" onclick="openSellModal('${item.id}')">💰 بيع وتقسيم</button>` : '-'}
+                    ${item.id !== 'raw_meso' ? (item.totalQty > 0 ? 
+                        `<button class="btn-table-sell" onclick="openGrandSellModal('${item.id}')" title="بيع وتصفير هذا العنصر من المخزن الكلي بالكامل وتوزيع الميسو كاش على الفريق">💰 بيع المخزن وتوزيع الميسو</button>` : 
+                        `<span style="color: var(--text-muted); font-size: 0.78rem;">المخزن فارغ</span>`
+                    ) : '<span style="color: var(--accent-gold); font-weight: 800;">كاش ميسو مباشر</span>'}
                 </td>
             </tr>
         `;
@@ -1206,7 +1245,9 @@ function closeShiftHistoryModal() {
 }
 
 // 22. SMART BATCH SALE & PAYOUT SYSTEM
-let currentSellItemId = null;
+function openGrandSellModal(itemId) {
+    openSellModal(itemId);
+}
 
 function openSellModal(itemId) {
     const modal = document.getElementById('sell-modal');
@@ -1226,12 +1267,16 @@ function openSellModal(itemId) {
     const nameArEl = document.getElementById('sell-item-name-ar');
     if (nameArEl) nameArEl.innerText = itemObj.nameAr;
 
-    const availableBag = getAccountBagQty(itemId);
-    const availEl = document.getElementById('sell-available-qty');
-    if (availEl) availEl.innerText = formatNumber(availableBag);
+    let totalContributed = 0;
+    TEAM_MEMBERS.forEach(m => {
+        totalContributed += ((appState.members[m.id]?.items && appState.members[m.id].items[itemId]) || 0);
+    });
 
-    // Default inputs
-    const initialQty = availableBag > 0 ? availableBag : 1;
+    const availEl = document.getElementById('sell-available-qty');
+    if (availEl) availEl.innerText = formatNumber(totalContributed);
+
+    // Default inputs: sell ALL totalContributed pieces in warehouse to zero it out!
+    const initialQty = totalContributed > 0 ? totalContributed : 1;
     document.getElementById('sell-input-qty').value = initialQty;
     document.getElementById('sell-input-unit-price').value = itemObj.price;
     document.getElementById('sell-input-total-price').value = initialQty * itemObj.price;
@@ -1431,6 +1476,195 @@ function confirmExecuteSale() {
     showToast(`🎉 تم بيع ${formatNumber(soldQty)} قطعة بنجاح وإضافة ${formatNumber(totalRevenue)} ميسو كاش لحسابات الفريق!`, "cloud");
 }
 
+// ========================================================
+// 22B. SINGLE MEMBER SALE SYSTEM
+// ========================================================
+let currentMemberSellTarget = { memberId: null, itemId: null };
+
+function openMemberSellModal(memberId, itemId) {
+    const modal = document.getElementById('member-sell-modal');
+    if (!modal) return;
+
+    const member = getMember(memberId);
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    if (!member || !itemObj) return;
+
+    const curMemberQty = (appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0;
+    if (curMemberQty <= 0) {
+        alert(`لا يملك ${member.name} أي قطع مسجلة من (${itemObj.nameKo}) لبيعها.`);
+        return;
+    }
+
+    currentMemberSellTarget = { memberId, itemId };
+    document.getElementById('member-sell-target-member').value = memberId;
+    document.getElementById('member-sell-target-item').value = itemId;
+
+    document.getElementById('member-sell-modal-title').innerText = `💰 بيع عنصر لحساب ${member.name} فقط`;
+    const ownerBadge = document.getElementById('member-sell-owner-badge');
+    if (ownerBadge) {
+        ownerBadge.innerText = `👤 حساب: ${member.name}`;
+    }
+
+    const iconEl = document.getElementById('member-sell-item-icon');
+    if (iconEl) iconEl.src = itemObj.icon;
+    const nameKoEl = document.getElementById('member-sell-item-name-ko');
+    if (nameKoEl) nameKoEl.innerText = itemObj.nameKo;
+    const nameArEl = document.getElementById('member-sell-item-name-ar');
+    if (nameArEl) nameArEl.innerText = itemObj.nameAr;
+
+    const availEl = document.getElementById('member-sell-available-qty');
+    if (availEl) availEl.innerText = formatNumber(curMemberQty);
+
+    document.getElementById('member-sell-summary-name').innerText = member.name;
+    document.getElementById('member-sell-summary-name2').innerText = member.name;
+
+    // Default: sell ALL of member's pieces
+    document.getElementById('member-sell-input-qty').value = curMemberQty;
+    document.getElementById('member-sell-input-unit-price').value = itemObj.price;
+    document.getElementById('member-sell-input-total-price').value = curMemberQty * itemObj.price;
+
+    onMemberSellInputsChange('qty');
+    modal.classList.add('open');
+}
+
+function closeMemberSellModal() {
+    const modal = document.getElementById('member-sell-modal');
+    if (modal) modal.classList.remove('open');
+    currentMemberSellTarget = { memberId: null, itemId: null };
+}
+
+function setMemberSellAllQty() {
+    const { memberId, itemId } = currentMemberSellTarget;
+    if (!memberId || !itemId) return;
+    const curMemberQty = (appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0;
+    document.getElementById('member-sell-input-qty').value = curMemberQty;
+    onMemberSellInputsChange('qty');
+}
+
+function onMemberSellInputsChange(changedField) {
+    const { memberId, itemId } = currentMemberSellTarget;
+    if (!memberId || !itemId) return;
+
+    let qty = parseInt(document.getElementById('member-sell-input-qty').value, 10);
+    if (isNaN(qty) || qty < 0) qty = 0;
+
+    let unit = parseInt(document.getElementById('member-sell-input-unit-price').value, 10);
+    if (isNaN(unit) || unit < 0) unit = 0;
+
+    let total = parseInt(document.getElementById('member-sell-input-total-price').value, 10);
+    if (isNaN(total) || total < 0) total = 0;
+
+    if (changedField === 'unit' || changedField === 'qty') {
+        total = qty * unit;
+        document.getElementById('member-sell-input-total-price').value = total;
+    } else if (changedField === 'total') {
+        if (qty > 0) {
+            unit = Math.round(total / qty);
+            document.getElementById('member-sell-input-unit-price').value = unit;
+        }
+    }
+
+    const sumMeso = document.getElementById('member-sell-summary-meso');
+    if (sumMeso) sumMeso.innerText = `+${formatNumber(total)} ميسو`;
+
+    const sumItems = document.getElementById('member-sell-summary-items');
+    if (sumItems) sumItems.innerText = `-${formatNumber(qty)} قطعة`;
+
+    const sumBag = document.getElementById('member-sell-summary-bag');
+    if (sumBag) sumBag.innerText = `-${formatNumber(qty)} قطعة`;
+}
+
+function confirmExecuteMemberSale() {
+    const memberId = document.getElementById('member-sell-target-member').value;
+    const itemId = document.getElementById('member-sell-target-item').value;
+    if (!memberId || !itemId) return;
+
+    const member = getMember(memberId);
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    if (!member || !itemObj) return;
+
+    const soldQty = parseInt(document.getElementById('member-sell-input-qty').value, 10);
+    const totalRevenue = parseInt(document.getElementById('member-sell-input-total-price').value, 10);
+    const unitPrice = parseInt(document.getElementById('member-sell-input-unit-price').value, 10) || (soldQty > 0 ? Math.round(totalRevenue / soldQty) : 0);
+
+    const curMemberQty = (appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0;
+
+    if (isNaN(soldQty) || soldQty <= 0) {
+        alert("يرجى إدخال كمية بيع صحيحة أكبر من 0.");
+        return;
+    }
+
+    if (soldQty > curMemberQty) {
+        alert(`الكمية المراد بيعها (${formatNumber(soldQty)}) أكبر من الرصيد المتوفر لدى ${member.name} (${formatNumber(curMemberQty)} قطعة).`);
+        return;
+    }
+
+    if (isNaN(totalRevenue) || totalRevenue <= 0) {
+        alert("يرجى إدخال سعر بيع صحيح أكبر من 0.");
+        return;
+    }
+
+    const confirmMsg = 
+        `هل أنت متأكد من بيع ${formatNumber(soldQty)} قطعة من (${itemObj.nameKo}) لحساب ${member.name} فقط؟\n\n` +
+        `• سيتم إضافة: +${formatNumber(totalRevenue)} ميسو كاش نقد في رصيد ${member.name}.\n` +
+        `• سيتم خصم: -${formatNumber(soldQty)} قطعة من دروبات ${member.name} ومن الشنطة والمحصلة الكلية.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    if (!appState.members[memberId]) appState.members[memberId] = { items: {} };
+    if (!appState.members[memberId].items) appState.members[memberId].items = {};
+
+    // 1. Deduct items from member
+    const newItems = Math.max(0, curMemberQty - soldQty);
+    if (newItems === 0) {
+        delete appState.members[memberId].items[itemId];
+    } else {
+        appState.members[memberId].items[itemId] = newItems;
+    }
+
+    // 2. Add cash Meso to member's account!
+    const curMeso = appState.members[memberId].items['raw_meso'] || 0;
+    appState.members[memberId].items['raw_meso'] = curMeso + totalRevenue;
+
+    // 3. Deduct from account bag
+    const curBag = getAccountBagQty(itemId);
+    if (!appState.accountInventory) appState.accountInventory = {};
+    appState.accountInventory[itemId] = Math.max(0, curBag - soldQty);
+
+    // 4. Log in sales history
+    if (!appState.salesLog) appState.salesLog = [];
+    appState.salesLog.unshift({
+        id: 'sale_' + Date.now(),
+        type: 'member_sale',
+        memberId: member.id,
+        memberName: member.name,
+        memberAvatar: member.avatar,
+        itemId,
+        itemNameKo: itemObj.nameKo,
+        itemNameAr: itemObj.nameAr,
+        itemIcon: itemObj.icon,
+        soldQty,
+        unitPrice,
+        totalRevenue,
+        payouts: [{
+            memberId: member.id,
+            name: member.name,
+            avatar: member.avatar,
+            qtyDeducted: soldQty,
+            mesoEarned: totalRevenue
+        }],
+        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        date: new Date().toLocaleDateString('ar-EG')
+    });
+    if (appState.salesLog.length > 50) appState.salesLog.pop();
+
+    closeMemberSellModal();
+    refreshAllUI();
+    saveStateDebounced();
+
+    showToast(`🎉 تم بيع ${formatNumber(soldQty)} قطعة بنجاح وإيداع ${formatNumber(totalRevenue)} ميسو كاش في رصيد ${member.name}!`, "cloud");
+}
+
 function openSalesHistoryModal() {
     const modal = document.getElementById('sales-history-modal');
     if (!modal) return;
@@ -1441,39 +1675,47 @@ function openSalesHistoryModal() {
         if (sales.length === 0) {
             listEl.innerHTML = `<div style="text-align: center; color: var(--text-dim); padding: 30px;">لم يتم تسجيل أي عمليات بيع بعد. بمجرد بيع أي دروب سيظهر توزيعه هنا بالتفصيل!</div>`;
         } else {
-            listEl.innerHTML = sales.map(s => `
-                <div class="sales-timeline-row">
-                    <div class="sales-timeline-header">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <img src="${s.itemIcon}" alt="" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; background: #000;">
-                            <div>
-                                <strong>${s.itemNameKo} (${s.itemNameAr})</strong>
-                                <div style="font-size: 0.78rem; color: var(--text-muted);">
-                                    تم بيع: ${formatNumber(s.soldQty)} قطعة | سعر الواحدة: ${formatNumber(s.unitPrice)} ميسو
+            listEl.innerHTML = sales.map(s => {
+                const isMemberSale = s.type === 'member_sale';
+                return `
+                    <div class="sales-timeline-row">
+                        <div class="sales-timeline-header">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <img src="${s.itemIcon}" alt="" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; background: #000;">
+                                <div>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <strong>${s.itemNameKo} (${s.itemNameAr})</strong>
+                                        ${isMemberSale ? 
+                                            `<span style="background: rgba(56,189,248,0.2); color: #38bdf8; font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; font-weight: 800;">👤 بيع خاص لحساب ${s.memberName}</span>` : 
+                                            `<span style="background: rgba(251,191,36,0.2); color: #fbbf24; font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; font-weight: 800;">👑 بيع وتصفير المخزن الكلي</span>`}
+                                    </div>
+                                    <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                                        تم بيع: ${formatNumber(s.soldQty)} قطعة | سعر الواحدة: ${formatNumber(s.unitPrice)} ميسو
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align: left;">
+                                <div style="color: var(--accent-gold); font-size: 1.1rem; font-weight: 900;">
+                                    +${formatNumber(s.totalRevenue)} ميسو
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-dim);">
+                                    ${s.date || ''} - ${s.time || ''}
                                 </div>
                             </div>
                         </div>
-                        <div style="text-align: left;">
-                            <div style="color: var(--accent-gold); font-size: 1.1rem; font-weight: 900;">
-                                +${formatNumber(s.totalRevenue)} ميسو
-                            </div>
-                            <div style="font-size: 0.75rem; color: var(--text-dim);">
-                                ${s.date || ''} - ${s.time || ''}
-                            </div>
+                        <div class="sales-payouts-mini-grid">
+                            <span style="font-weight: 800; color: #cbd5e1;">${isMemberSale ? 'المستفيد:' : 'توزيع الكاش:'}</span>
+                            ${s.payouts.map(p => `
+                                <span class="sales-payout-chip">
+                                    ${p.avatar} ${p.name}: 
+                                    <strong style="color: var(--accent-gold);">+${formatNumber(p.mesoEarned)} ميسو</strong>
+                                    <span style="font-size: 0.72rem; color: #f87171;">(-${formatNumber(p.qtyDeducted)})</span>
+                                </span>
+                            `).join('')}
                         </div>
                     </div>
-                    <div class="sales-payouts-mini-grid">
-                        <span style="font-weight: 800; color: #cbd5e1;">توزيع الكاش:</span>
-                        ${s.payouts.map(p => `
-                            <span class="sales-payout-chip">
-                                ${p.avatar} ${p.name}: 
-                                <strong style="color: var(--accent-gold);">+${formatNumber(p.mesoEarned)} ميسو</strong>
-                                <span style="font-size: 0.72rem; color: #f87171;">(-${formatNumber(p.qtyDeducted)})</span>
-                            </span>
-                        `).join('')}
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
     }
 

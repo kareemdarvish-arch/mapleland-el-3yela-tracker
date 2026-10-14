@@ -1719,6 +1719,32 @@ body {
     padding: 4px 10px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
+/* GRAND WAREHOUSE SECTION */
+.master-warehouse-header {
+    background: rgba(12, 17, 30, 0.6);
+    border-radius: 14px;
+    padding: 16px;
+    border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.master-warehouse-header .filter-chip {
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    background: rgba(30, 41, 59, 0.5);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 700;
+    transition: all 0.2s;
+}
+
+.master-warehouse-header .filter-chip.active {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+    border-color: #f59e0b;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
 /* RESPONSIVE BREAKPOINTS */
