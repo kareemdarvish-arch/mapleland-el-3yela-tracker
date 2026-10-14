@@ -63,6 +63,7 @@ let appState = {
     },
     accountInventory: {},
     shiftLog: [],
+    salesLog: [],
     activeTab: 'mohamed',
     activeCategory: 'all',
     searchQuery: '',
@@ -126,6 +127,7 @@ async function initDatabase() {
         if (initial.data.members) appState.members = initial.data.members;
         if (initial.data.accountInventory) appState.accountInventory = initial.data.accountInventory;
         if (initial.data.shiftLog) appState.shiftLog = initial.data.shiftLog;
+        if (initial.data.salesLog) appState.salesLog = initial.data.salesLog;
     }
 
     // Subscribe to incoming realtime changes (from other players)
@@ -134,6 +136,7 @@ async function initDatabase() {
             if (incomingData.members) appState.members = incomingData.members;
             if (incomingData.accountInventory) appState.accountInventory = incomingData.accountInventory;
             if (incomingData.shiftLog) appState.shiftLog = incomingData.shiftLog;
+            if (incomingData.salesLog) appState.salesLog = incomingData.salesLog;
             refreshAllUI();
             if (source === 'cloud') {
                 showToast("🔄 تم استلام تحديث جديد من الفريق سحابياً!", "cloud");
@@ -298,11 +301,12 @@ function renderItemCards(memberId) {
 
                 <!-- Actions Row: Quick Fix & Manual Controls toggle -->
                 <div class="card-actions-row">
+                    ${item.id !== 'raw_meso' ? `<button class="btn-card-sell" onclick="openSellModal('${item.id}')" title="بيع الدفعة في المزاد أو المتجر وتقسيم الميسو كاش على الجميع">💰 بيع وتقسيم</button>` : ''}
                     <button class="btn-card-fix" onclick="openItemFixModal('${memberId}', '${item.id}')" title="تعديل مباشر في حال حدث خطأ أو كتبت رقم غلط">
                         ✏️ تصحيح خطأ
                     </button>
                     <button class="btn-toggle-manual" onclick="toggleManualWrap('${memberId}', '${item.id}')">
-                        ➕ أزرار الزيادة (+/-)
+                        ➕ أزرار (+/-)
                     </button>
                     <span class="card-total-meso" id="meso-${memberId}-${item.id}" style="font-size: 0.85rem; font-weight: 800; color: var(--accent-gold);">
                         ${formatNumber(totalItemMeso)} ميسو
@@ -558,6 +562,9 @@ function updateMasterTable(aggregates, totalMeso) {
                     <span style="color: #38bdf8; font-weight: 800;">محمد: ${mohamedQty}</span> | 
                     <span style="color: #ec4899; font-weight: 800;">طنط ايمي: ${amyQty}</span> | 
                     <span style="color: #f97316; font-weight: 800;">عبدالرحمن: ${abdoQty}</span>
+                </td>
+                <td style="text-align: center;">
+                    ${item.id !== 'raw_meso' ? `<button class="btn-table-sell" onclick="openSellModal('${item.id}')">💰 بيع وتقسيم</button>` : '-'}
                 </td>
             </tr>
         `;
@@ -886,6 +893,8 @@ function setupEventListeners() {
             closeFixModal();
             closeFullShiftModal();
             closeShiftHistoryModal();
+            closeSellModal();
+            closeSalesHistoryModal();
         }
     });
 }
@@ -1195,3 +1204,284 @@ function closeShiftHistoryModal() {
     const modal = document.getElementById('history-modal');
     if (modal) modal.classList.remove('open');
 }
+
+// 22. SMART BATCH SALE & PAYOUT SYSTEM
+let currentSellItemId = null;
+
+function openSellModal(itemId) {
+    const modal = document.getElementById('sell-modal');
+    if (!modal) return;
+
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    if (!itemObj) return;
+
+    currentSellItemId = itemId;
+    document.getElementById('sell-target-item').value = itemId;
+
+    // Set banner info
+    const iconEl = document.getElementById('sell-item-icon');
+    if (iconEl) iconEl.src = itemObj.icon;
+    const nameKoEl = document.getElementById('sell-item-name-ko');
+    if (nameKoEl) nameKoEl.innerText = itemObj.nameKo;
+    const nameArEl = document.getElementById('sell-item-name-ar');
+    if (nameArEl) nameArEl.innerText = itemObj.nameAr;
+
+    const availableBag = getAccountBagQty(itemId);
+    const availEl = document.getElementById('sell-available-qty');
+    if (availEl) availEl.innerText = formatNumber(availableBag);
+
+    // Default inputs
+    const initialQty = availableBag > 0 ? availableBag : 1;
+    document.getElementById('sell-input-qty').value = initialQty;
+    document.getElementById('sell-input-unit-price').value = itemObj.price;
+    document.getElementById('sell-input-total-price').value = initialQty * itemObj.price;
+
+    onSellInputsChange('qty');
+    modal.classList.add('open');
+}
+
+function closeSellModal() {
+    const modal = document.getElementById('sell-modal');
+    if (modal) modal.classList.remove('open');
+    currentSellItemId = null;
+}
+
+function onSellInputsChange(changedField) {
+    const itemId = document.getElementById('sell-target-item').value || currentSellItemId;
+    if (!itemId) return;
+
+    let qty = parseInt(document.getElementById('sell-input-qty').value, 10);
+    if (isNaN(qty) || qty < 0) qty = 0;
+
+    let unit = parseInt(document.getElementById('sell-input-unit-price').value, 10);
+    if (isNaN(unit) || unit < 0) unit = 0;
+
+    let total = parseInt(document.getElementById('sell-input-total-price').value, 10);
+    if (isNaN(total) || total < 0) total = 0;
+
+    if (changedField === 'unit' || changedField === 'qty') {
+        total = qty * unit;
+        document.getElementById('sell-input-total-price').value = total;
+    } else if (changedField === 'total') {
+        if (qty > 0) {
+            unit = Math.round(total / qty);
+            document.getElementById('sell-input-unit-price').value = unit;
+        }
+    }
+
+    // Calculate members breakdown
+    const payoutList = document.getElementById('sell-payout-list');
+    if (!payoutList) return;
+
+    let totalContributed = 0;
+    const contributions = {};
+    TEAM_MEMBERS.forEach(m => {
+        const q = (appState.members[m.id]?.items && appState.members[m.id].items[itemId]) || 0;
+        contributions[m.id] = q;
+        totalContributed += q;
+    });
+
+    if (totalContributed === 0) {
+        payoutList.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; padding: 10px; text-align: center;">لا يملك أي عضو في الفريق حالياً كميات مسجلة من هذا العنصر.</div>`;
+        return;
+    }
+
+    payoutList.innerHTML = TEAM_MEMBERS.map(m => {
+        const memberFarmed = contributions[m.id] || 0;
+        const ratio = totalContributed > 0 ? (memberFarmed / totalContributed) : 0;
+        const pct = (ratio * 100).toFixed(1);
+        
+        let memberSoldShare = 0;
+        if (qty >= totalContributed) {
+            memberSoldShare = memberFarmed;
+        } else {
+            memberSoldShare = Math.round(ratio * qty);
+        }
+        const memberMesoShare = Math.round(ratio * total);
+
+        return `
+            <div class="payout-member-row">
+                <div class="payout-member-info">
+                    <span style="font-size: 1.3rem;">${m.avatar}</span>
+                    <div>
+                        <strong>${m.name}</strong>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                            جمع ${formatNumber(memberFarmed)} قطعة (${pct}%)
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: left;">
+                    <div class="payout-meso-amount">+${formatNumber(memberMesoShare)} ميسو</div>
+                    <div style="font-size: 0.75rem; color: #f87171;">
+                        سيتم خصم: -${formatNumber(memberSoldShare)} قطعة
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function confirmExecuteSale() {
+    const itemId = document.getElementById('sell-target-item').value || currentSellItemId;
+    if (!itemId) return;
+
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    if (!itemObj) return;
+
+    const soldQty = parseInt(document.getElementById('sell-input-qty').value, 10);
+    const totalRevenue = parseInt(document.getElementById('sell-input-total-price').value, 10);
+    const unitPrice = parseInt(document.getElementById('sell-input-unit-price').value, 10) || (soldQty > 0 ? Math.round(totalRevenue / soldQty) : 0);
+
+    if (isNaN(soldQty) || soldQty <= 0) {
+        alert("يرجى إدخال كمية بيع صحيحة أكبر من 0.");
+        return;
+    }
+
+    if (isNaN(totalRevenue) || totalRevenue <= 0) {
+        alert("يرجى إدخال سعر بيع صحيح أكبر من 0.");
+        return;
+    }
+
+    let totalContributed = 0;
+    const contributions = {};
+    TEAM_MEMBERS.forEach(m => {
+        const q = (appState.members[m.id]?.items && appState.members[m.id].items[itemId]) || 0;
+        contributions[m.id] = q;
+        totalContributed += q;
+    });
+
+    if (totalContributed === 0) {
+        alert("لا يملك أي عضو في الفريق حالياً كميات مسجلة من هذا العنصر لبيعها.");
+        return;
+    }
+
+    const confirmMsg = 
+        `هل أنت متأكد من تنفيذ عملية بيع ${formatNumber(soldQty)} قطعة من (${itemObj.nameKo})؟\n\n` +
+        `• إجمالي المبلغ المحصل: ${formatNumber(totalRevenue)} ميسو\n` +
+        `• سيتم خصم القطع المباعة فوراً من الشنطة ومن حساب كل عضو.\n` +
+        `• سيتم إضافة الميسو كاش نقد مباشر في حساب كل عضو حسب نسبة مساهمته!`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const payouts = [];
+
+    TEAM_MEMBERS.forEach(m => {
+        const memberFarmed = contributions[m.id] || 0;
+        const ratio = totalContributed > 0 ? (memberFarmed / totalContributed) : 0;
+
+        let memberSoldShare = 0;
+        if (soldQty >= totalContributed) {
+            memberSoldShare = memberFarmed;
+        } else {
+            memberSoldShare = Math.round(ratio * soldQty);
+        }
+        const memberMesoShare = Math.round(ratio * totalRevenue);
+
+        if (!appState.members[m.id]) appState.members[m.id] = { items: {} };
+        if (!appState.members[m.id].items) appState.members[m.id].items = {};
+
+        // Deduct sold items
+        const curItems = appState.members[m.id].items[itemId] || 0;
+        const newItems = Math.max(0, curItems - memberSoldShare);
+        if (newItems === 0) {
+            delete appState.members[m.id].items[itemId];
+        } else {
+            appState.members[m.id].items[itemId] = newItems;
+        }
+
+        // Add cash Meso to member's account!
+        const curMeso = appState.members[m.id].items['raw_meso'] || 0;
+        appState.members[m.id].items['raw_meso'] = curMeso + memberMesoShare;
+
+        payouts.push({
+            memberId: m.id,
+            name: m.name,
+            avatar: m.avatar,
+            qtyDeducted: memberSoldShare,
+            mesoEarned: memberMesoShare
+        });
+    });
+
+    // Update account bag
+    const curBag = getAccountBagQty(itemId);
+    if (!appState.accountInventory) appState.accountInventory = {};
+    appState.accountInventory[itemId] = Math.max(0, curBag - soldQty);
+
+    // Log sale
+    if (!appState.salesLog) appState.salesLog = [];
+    appState.salesLog.unshift({
+        id: 'sale_' + Date.now(),
+        itemId,
+        itemNameKo: itemObj.nameKo,
+        itemNameAr: itemObj.nameAr,
+        itemIcon: itemObj.icon,
+        soldQty,
+        unitPrice,
+        totalRevenue,
+        payouts,
+        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        date: new Date().toLocaleDateString('ar-EG')
+    });
+    if (appState.salesLog.length > 50) appState.salesLog.pop();
+
+    closeSellModal();
+    refreshAllUI();
+    saveStateDebounced();
+
+    showToast(`🎉 تم بيع ${formatNumber(soldQty)} قطعة بنجاح وإضافة ${formatNumber(totalRevenue)} ميسو كاش لحسابات الفريق!`, "cloud");
+}
+
+function openSalesHistoryModal() {
+    const modal = document.getElementById('sales-history-modal');
+    if (!modal) return;
+
+    const listEl = document.getElementById('sales-history-list');
+    if (listEl) {
+        const sales = appState.salesLog || [];
+        if (sales.length === 0) {
+            listEl.innerHTML = `<div style="text-align: center; color: var(--text-dim); padding: 30px;">لم يتم تسجيل أي عمليات بيع بعد. بمجرد بيع أي دروب سيظهر توزيعه هنا بالتفصيل!</div>`;
+        } else {
+            listEl.innerHTML = sales.map(s => `
+                <div class="sales-timeline-row">
+                    <div class="sales-timeline-header">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <img src="${s.itemIcon}" alt="" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; background: #000;">
+                            <div>
+                                <strong>${s.itemNameKo} (${s.itemNameAr})</strong>
+                                <div style="font-size: 0.78rem; color: var(--text-muted);">
+                                    تم بيع: ${formatNumber(s.soldQty)} قطعة | سعر الواحدة: ${formatNumber(s.unitPrice)} ميسو
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="color: var(--accent-gold); font-size: 1.1rem; font-weight: 900;">
+                                +${formatNumber(s.totalRevenue)} ميسو
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim);">
+                                ${s.date || ''} - ${s.time || ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sales-payouts-mini-grid">
+                        <span style="font-weight: 800; color: #cbd5e1;">توزيع الكاش:</span>
+                        ${s.payouts.map(p => `
+                            <span class="sales-payout-chip">
+                                ${p.avatar} ${p.name}: 
+                                <strong style="color: var(--accent-gold);">+${formatNumber(p.mesoEarned)} ميسو</strong>
+                                <span style="font-size: 0.72rem; color: #f87171;">(-${formatNumber(p.qtyDeducted)})</span>
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+
+    modal.classList.add('open');
+}
+
+function closeSalesHistoryModal() {
+    const modal = document.getElementById('sales-history-modal');
+    if (modal) modal.classList.remove('open');
+}
+

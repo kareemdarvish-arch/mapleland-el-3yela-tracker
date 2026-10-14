@@ -1562,7 +1562,163 @@ body {
 
 .history-time {
     font-size: 0.78rem;
-    color: var(--text-dim);
+/* SMART BATCH SELL & PAYOUT SYSTEM */
+.btn-card-sell {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.3));
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    color: #fbbf24;
+    font-weight: 800;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.76rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-card-sell:hover {
+    background: rgba(245, 158, 11, 0.45);
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+}
+
+.btn-table-sell {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+    border: none;
+    font-weight: 900;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btn-table-sell:hover {
+    background: #fbbf24;
+    transform: scale(1.03);
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+}
+
+.sell-item-banner {
+    background: rgba(10, 15, 28, 0.85);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.sell-item-banner img {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #000;
+    padding: 4px;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+
+.sell-inputs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.sell-breakdown-card {
+    background: rgba(8, 12, 22, 0.95);
+    border: 1.5px solid rgba(251, 191, 36, 0.35);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.sell-breakdown-card h4 {
+    font-size: 0.92rem;
+    color: var(--accent-gold);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.payout-member-row {
+    background: rgba(20, 29, 50, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.88rem;
+}
+
+.payout-member-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.payout-share-badge {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.payout-meso-amount {
+    color: var(--accent-gold);
+    font-size: 1.05rem;
+    font-weight: 900;
+    text-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+
+/* SALES HISTORY TIMELINE */
+.sales-timeline-row {
+    background: rgba(10, 15, 28, 0.85);
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sales-timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+}
+
+.sales-payouts-mini-grid {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+}
+
+.sales-payout-chip {
+    background: rgba(20, 29, 50, 0.8);
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
 }
 
 /* RESPONSIVE BREAKPOINTS */

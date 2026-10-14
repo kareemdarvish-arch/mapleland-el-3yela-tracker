@@ -42,6 +42,11 @@
                 📜 سجل الورديات
             </button>
 
+            <!-- Sales History Modal Button -->
+            <button class="btn-nav" onclick="openSalesHistoryModal()" title="سجل المبيعات وتوزيع الميسو على الفريق">
+                💵 سجل المبيعات
+            </button>
+
             <!-- Copy Full Team Report for Chat/Discord -->
             <button class="btn-nav" onclick="copyTeamReport()" title="نسخ تقرير شامل للدروبات والميسو للمحادثة">
                 📋 تقرير الفريق
@@ -166,6 +171,7 @@
                             <th>عبدالرحمن 🏹</th>
                             <th>إجمالي القطع</th>
                             <th>إجمالي الميسو التقديري</th>
+                            <th>إجراء بيع الدفعة</th>
                         </tr>
                     </thead>
                     <tbody id="master-table-body">
@@ -341,13 +347,90 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeShiftHistoryModal()" type="button">إغلاق</button>
+    <!-- ======================================================== -->
+    <!-- 9. BATCH SALE & PAYOUT MODAL -->
+    <!-- ======================================================== -->
+    <div class="modal-overlay" id="sell-modal" onclick="if(event.target===this) closeSellModal()">
+        <div class="modal-content" style="max-width: 650px;">
+            <div class="modal-header">
+                <h3>💰 بيع الدفعة وتقسيم الميسو على الفريق</h3>
+                <button class="btn-modal-close" onclick="closeSellModal()" type="button">✕</button>
+            </div>
+            <div class="modal-body">
+                <!-- Item summary banner -->
+                <div class="sell-item-banner">
+                    <img id="sell-item-icon" src="assets/icon_garnet_ore.png" alt="">
+                    <div>
+                        <h3 id="sell-item-name-ko" style="font-size: 1.2rem; color: #fff;">-</h3>
+                        <div id="sell-item-name-ar" style="font-size: 0.85rem; color: var(--text-muted);">-</div>
+                        <div style="font-size: 0.82rem; color: var(--accent-gold); font-weight: 800; margin-top: 4px;">
+                            🎒 الإجمالي المتاح في شنطة الإيميل: <strong id="sell-available-qty">0</strong> قطعة
+                        </div>
+                    </div>
+                </div>
+
+                <input type="hidden" id="sell-target-item">
+
+                <!-- Sale Inputs: Qty & Price -->
+                <div class="sell-inputs-grid">
+                    <div class="form-group">
+                        <label for="sell-input-qty">الكمية المراد بيعها:</label>
+                        <input type="number" min="1" id="sell-input-qty" class="form-input" oninput="onSellInputsChange('qty')">
+                    </div>
+                    <div class="form-group">
+                        <label for="sell-input-unit-price">سعر بيع القطعة (ميسو):</label>
+                        <input type="number" min="1" id="sell-input-unit-price" class="form-input" oninput="onSellInputsChange('unit')">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="sell-input-total-price">أو إجمالي المبلغ المستلم بعد البيع بالكامل (ميسو):</label>
+                    <input type="number" min="1" id="sell-input-total-price" class="form-input" style="font-size: 1.15rem; color: var(--accent-gold); font-weight: 900;" oninput="onSellInputsChange('total')">
+                </div>
+
+                <!-- Live Payout Distribution Breakdown -->
+                <div class="sell-breakdown-card">
+                    <h4>💵 التوزيع العادل التلقائي لأرباح الميسو المستحقة:</h4>
+                    <div id="sell-payout-list">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                    <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 10px; line-height: 1.6; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+                        💡 <strong>ماذا سيحدث بعد التأكيد؟</strong>
+                        سيتم خصم القطع المباعة من شنطة الإيميل ومن رصيد كل لاعب بنسبة مساهمته، وسيتم إضافة كاش الميسو المستحق فوراً في حساب كل لاعب!
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeSellModal()" type="button">إلغاء</button>
+                <button class="btn-primary" onclick="confirmExecuteSale()" type="button" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 900;">
+                    🚀 تأكيد البيع وتوزيع الميسو الآن
+                </button>
             </div>
         </div>
     </div>
 
     <!-- ======================================================== -->
-    <!-- 9. FLOATING TOAST FEEDBACK -->
+    <!-- 10. SALES HISTORY LOG MODAL -->
+    <!-- ======================================================== -->
+    <div class="modal-overlay" id="sales-history-modal" onclick="if(event.target===this) closeSalesHistoryModal()">
+        <div class="modal-content" style="max-width: 750px;">
+            <div class="modal-header">
+                <h3>💵 سجل مبيعات الفريق وتوزيع الأرباح</h3>
+                <button class="btn-modal-close" onclick="closeSalesHistoryModal()" type="button">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="sales-history-list">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeSalesHistoryModal()" type="button">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- 11. FLOATING TOAST FEEDBACK -->
     <!-- ======================================================== -->
     <div class="toast-notice" id="toast-notice"></div>
 
