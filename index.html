@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تراكر غنائم وميسو MapleLand - شركة المرعبين المحدودة</title>
+    <link rel="icon" href="assets/icon_sunpiece.png" type="image/png">
+    
+    <!-- Google Fonts: Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Main Style -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <header class="navbar">
+        <div class="brand-box">
+            <div class="brand-icon">🍁</div>
+            <div class="brand-text">
+                <h1>تراكر غنائم MapleLand</h1>
+                <p>شركة المرعبين المحدودة • لوحة المتابعة والمحصلة الكلية للفريق</p>
+            </div>
+        </div>
+
+        <div class="nav-actions">
+            <!-- Sync Status Badge -->
+            <div class="sync-status-pill local" id="sync-status-badge" onclick="openSettingsModal()" title="انقر لربط أو تعديل قاعدة بيانات Firebase السحابية المباشرة">
+                💾 تخزين محلي (Offline)
+            </div>
+
+            <!-- Database Settings Modal Button -->
+            <button class="btn-nav" onclick="openSettingsModal()" title="إعدادات قاعدة بيانات Firebase المجانية للربط بينكم">
+                🔥 قاعدة البيانات
+            </button>
+
+            <!-- Copy Full Team Report for Chat/Discord -->
+            <button class="btn-nav" onclick="copyTeamReport()" title="نسخ تقرير شامل للدروبات والميسو للمحادثة">
+                📋 تقرير الفريق
+            </button>
+
+            <!-- Export Backup -->
+            <button class="btn-nav" onclick="exportBackupJSON()" title="حفظ نسخة احتياطية على جهازك بصيغة JSON">
+                📥 تصدير ملف
+            </button>
+
+            <!-- Import Backup -->
+            <label class="btn-nav" title="استرجاع نسخة احتياطية سابقة من جهازك">
+                📤 استيراد
+                <input type="file" accept=".json" onchange="importBackupJSON(this)" style="display:none">
+            </label>
+
+            <!-- Reset All -->
+            <button class="btn-nav" onclick="confirmResetAll()" title="تصفير دروبات وأرقام جميع الأعضاء بالكامل" style="color: #f87171; border-color: rgba(239,68,68,0.3);">
+                🗑️ تصفير الكل
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTAINER -->
+    <main class="container">
+
+        <!-- ======================================================== -->
+        <!-- 1. MASTER GRAND TOTAL CARD (بروفايل 4 - المحصلة الكلية) -->
+        <!-- ======================================================== -->
+        <section class="master-card" id="master-profile-card">
+            <div class="master-header">
+                <div class="master-badge-icon">👑</div>
+                <div class="master-title-box">
+                    <h2>
+                        المحصلة الكلية للفريق
+                        <span style="font-size: 0.85rem; color: var(--accent-gold); font-weight: 700; background: rgba(251,191,36,0.15); padding: 3px 10px; border-radius: 8px;">
+                            Grand Total Pool
+                        </span>
+                    </h2>
+                    <p>المجموع التراكمي اللحظي لكافة عناصر وغنائم الميسو المجمعة بواسطة (محمد + طنط ايمي + عبدالرحمن)</p>
+                </div>
+            </div>
+
+            <!-- Grand Totals Counter Strip -->
+            <div class="master-stats-grid">
+                <div class="master-stat-box total-meso">
+                    <div class="master-stat-icon">💰</div>
+                    <div class="master-stat-info">
+                        <div class="master-stat-label">إجمالي ثروة الفريق المقدرة بالميسو</div>
+                        <div class="master-stat-num" id="master-total-meso">0 ميسو</div>
+                    </div>
+                </div>
+
+                <div class="master-stat-box total-items">
+                    <div class="master-stat-icon">📦</div>
+                    <div class="master-stat-info">
+                        <div class="master-stat-label">إجمالي عدد القطع والدروبات المجمعة</div>
+                        <div class="master-stat-num" id="master-total-items">0 قطعة</div>
+                    </div>
+                </div>
+
+                <div class="master-stat-box top-farmer">
+                    <div class="master-stat-icon">🏆</div>
+                    <div class="master-stat-info">
+                        <div class="master-stat-label">المزارع الأكثر تجميعاً حالياً</div>
+                        <div class="master-stat-num" id="master-top-farmer">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Team Contribution Progress -->
+            <div class="team-progress-card">
+                <div class="team-progress-header">
+                    <span>📊 نسبة مساهمة كل عضو في حصيلة دخل الفريق:</span>
+                </div>
+                <div class="team-stacked-bar">
+                    <div class="stacked-segment mohamed" id="seg-mohamed" style="width: 33.33%;" title="محمد"></div>
+                    <div class="stacked-segment amy" id="seg-amy" style="width: 33.33%;" title="طنط ايمي"></div>
+                    <div class="stacked-segment abdo" id="seg-abdo" style="width: 33.33%;" title="عبدالرحمن"></div>
+                </div>
+                <div class="member-legend-grid">
+                    <div class="member-legend-item">
+                        <div class="legend-dot mohamed"></div>
+                        <span class="legend-name">محمد:</span>
+                        <span class="legend-val" id="legend-val-mohamed">0 ميسو (0%)</span>
+                    </div>
+                    <div class="member-legend-item">
+                        <div class="legend-dot amy"></div>
+                        <span class="legend-name">طنط ايمي:</span>
+                        <span class="legend-val" id="legend-val-amy">0 ميسو (0%)</span>
+                    </div>
+                    <div class="member-legend-item">
+                        <div class="legend-dot abdo"></div>
+                        <span class="legend-name">عبدالرحمن:</span>
+                        <span class="legend-val" id="legend-val-abdo">0 ميسو (0%)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Master Items Breakdown Collapsible Accordion -->
+            <button class="master-table-toggle-btn" onclick="toggleMasterTable()" type="button">
+                <span>📋 تفاصيل توزيع الغنائم المشتركة لكل عنصر بين الأعضاء (انقر للعرض/الإخفاء)</span>
+                <span id="master-table-chevron">▼</span>
+            </button>
+
+            <div class="master-table-container" id="master-table-container">
+                <table class="master-table">
+                    <thead>
+                        <tr>
+                            <th>العنصر</th>
+                            <th>سعر القطعة</th>
+                            <th>محمد 🧙‍♂️</th>
+                            <th>طنط ايمي 🧝‍♀️</th>
+                            <th>عبدالرحمن 🏹</th>
+                            <th>إجمالي القطع</th>
+                            <th>إجمالي الميسو التقديري</th>
+                        </tr>
+                    </thead>
+                    <tbody id="master-table-body">
+                        <!-- Populated dynamically via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ======================================================== -->
+        <!-- 2. MEMBER PROFILE SELECTOR TABS -->
+        <!-- ======================================================== -->
+        <nav class="profiles-tab-bar" aria-label="أعضاء الفريق">
+            <button class="profile-tab-btn tab-mohamed active" onclick="switchTab('mohamed')" type="button">
+                <span class="tab-avatar">🧙‍♂️</span>
+                <span>محمد</span>
+            </button>
+            <button class="profile-tab-btn tab-amy" onclick="switchTab('amy')" type="button">
+                <span class="tab-avatar">🧝‍♀️</span>
+                <span>طنط ايمي</span>
+            </button>
+            <button class="profile-tab-btn tab-abdo" onclick="switchTab('abdo')" type="button">
+                <span class="tab-avatar">🏹</span>
+                <span>عبدالرحمن</span>
+            </button>
+            <button class="profile-tab-btn tab-all" onclick="switchTab('all')" type="button">
+                <span class="tab-avatar">👥</span>
+                <span>عرض الكل جنباً إلى جنب</span>
+            </button>
+        </nav>
+
+        <!-- ======================================================== -->
+        <!-- 3. DYNAMIC MEMBER PROFILE PANELS -->
+        <!-- ======================================================== -->
+        <div id="member-panels-container">
+            <!-- Panels for Mohamed, Tant Amy, and Abdelrahman rendered via JS -->
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- 4. SIDE-BY-SIDE ALL MEMBERS PANEL -->
+        <!-- ======================================================== -->
+        <div id="panel-all" class="member-profile-panel">
+            <!-- Rendered via JS -->
+        </div>
+
+    </main>
+
+    <!-- ======================================================== -->
+    <!-- 5. DATABASE SETTINGS MODAL -->
+    <!-- ======================================================== -->
+    <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this) closeSettingsModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔥 إعدادات المزامنة السحابية (Firebase)</h3>
+                <button class="btn-modal-close" onclick="closeSettingsModal()" type="button" title="إغلاق">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <p>
+                    يدعم هذا التراكر العمل تلقائياً بدون إنترنت عبر <strong>التخزين المحلي (LocalStorage)</strong> داخل متصفحك.
+                    إذا أردت أن يشاهد كل من <strong>محمد، طنط ايمي، وعبدالرحمن</strong> التعديلات والإضافات لحظياً من أجهزتهم المختلفة في نفس الوقت، يمكنك ربط <strong>Firebase Realtime Database</strong> مجاناً في دقيقتين!
+                </p>
+
+                <div class="settings-box">
+                    <h4>⚙️ بيانات مفتاح اتصال Firebase:</h4>
+                    
+                    <div class="form-group">
+                        <label for="cfg-db-url">Database URL (رابط قاعدة البيانات):</label>
+                        <input type="text" id="cfg-db-url" class="form-input" placeholder="https://your-project-id-default-rtdb.firebaseio.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cfg-api-key">API Key (مفتاح الـ API):</label>
+                        <input type="text" id="cfg-api-key" class="form-input" placeholder="AIzaSyA...">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cfg-project-id">Project ID (معرّف المشروع):</label>
+                        <input type="text" id="cfg-project-id" class="form-input" placeholder="mapleland-tracker">
+                    </div>
+                </div>
+
+                <div class="settings-box" style="border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.05);">
+                    <h4 style="color: var(--accent-gold);">💡 كيف تحصل على هذه البيانات مجاناً 100%؟</h4>
+                    <ol style="margin-right: 18px; line-height: 1.8; font-size: 0.85rem; color: #cbd5e1;">
+                        <li>ادخل إلى <a href="https://console.firebase.google.com" target="_blank" style="color: #38bdf8; text-decoration: underline;">Firebase Console</a> وسجل بحساب جوجل.</li>
+                        <li>أنشئ مشروعاً جديداً مجانياً واضغط على <strong>Realtime Database</strong> ثم <strong>Create Database</strong>.</li>
+                        <li>اختر في قواعد الأمان (Rules): السماح بالقراءة والكتابة <code>".read": true, ".write": true</code>.</li>
+                        <li>انسخ رابط قاعدة البيانات والـ Web API Key والصقهم بالأعلى واضغط حفظ!</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeSettingsModal()" type="button">إلغاء</button>
+                <button class="btn-primary" onclick="saveDatabaseSettings()" type="button">💾 حفظ وتفعيل الاتصال</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- 6. FLOATING TOAST FEEDBACK -->
+    <!-- ======================================================== -->
+    <div class="toast-notice" id="toast-notice"></div>
+
+    <!-- ======================================================== -->
+    <!-- 7. FIREBASE & APPLICATION SCRIPTS -->
+    <!-- ======================================================== -->
+    <!-- Firebase Compat SDKs (CDN) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <!-- Tracker Data & Sync Scripts -->
+    <script src="firebase-config.js"></script>
+    <script src="tracker.js"></script>
+</body>
+</html>
