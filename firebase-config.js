@@ -4,15 +4,16 @@
  * If Firebase is unconfigured, it automatically falls back to LocalStorage.
  */
 
-// Default Configuration Template
+// Default Configuration Template - mapleland-el-3eyla
 const DEFAULT_FIREBASE_CONFIG = {
-    apiKey: "",
-    authDomain: "",
-    databaseURL: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+    apiKey: "AIzaSyDfilsZj_Lc6SUIL4_5OhJJSqM87WRnVD0",
+    authDomain: "mapleland-el-3eyla.firebaseapp.com",
+    databaseURL: "https://mapleland-el-3eyla-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "mapleland-el-3eyla",
+    storageBucket: "mapleland-el-3eyla.firebasestorage.app",
+    messagingSenderId: "850176832753",
+    appId: "1:850176832753:web:bc79e6d4157f367a366550",
+    measurementId: "G-3GTQ7NZVDN"
 };
 
 class TeamDatabaseManager {
