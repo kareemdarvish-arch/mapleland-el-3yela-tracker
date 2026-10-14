@@ -372,6 +372,11 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeShiftHistoryModal()" type="button">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ======================================================== -->
     <!-- 9. BATCH SALE & PAYOUT MODAL -->
     <!-- ======================================================== -->
@@ -403,6 +408,9 @@
                 </div>
 
                 <input type="hidden" id="sell-target-item">
+
+                <!-- Smart Suggested Price Hint -->
+                <div id="sell-smart-price-hint"></div>
 
                 <!-- Sale Inputs: Qty & Price -->
                 <div class="sell-inputs-grid">
@@ -471,6 +479,9 @@
 
                 <input type="hidden" id="member-sell-target-member">
                 <input type="hidden" id="member-sell-target-item">
+
+                <!-- Smart Suggested Price Hint -->
+                <div id="member-sell-smart-price-hint"></div>
 
                 <!-- Sale Inputs: Qty & Price -->
                 <div class="sell-inputs-grid">

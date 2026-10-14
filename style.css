@@ -1572,6 +1572,9 @@ body {
 
 .history-time {
     font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
 /* SMART BATCH SELL & PAYOUT SYSTEM */
 .btn-card-sell {
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.3));
@@ -1729,6 +1732,232 @@ body {
     padding: 4px 10px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
+}
+
+/* SMART PRICING HINTS & BADGES */
+.smart-price-badge-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.smart-price-badge-box.actual {
+    background: linear-gradient(135deg, rgba(6, 78, 59, 0.4), rgba(15, 23, 42, 0.9));
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+}
+
+.smart-price-badge-box.guide {
+    background: linear-gradient(135deg, rgba(120, 53, 15, 0.35), rgba(15, 23, 42, 0.9));
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.smart-price-text {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+}
+
+.smart-price-icon {
+    font-size: 1.4rem;
+}
+
+.btn-use-smart-price {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 0.82rem;
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.btn-use-smart-price:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+/* SMART VAULT DASHBOARD STYLES */
+.vault-smart-header-card {
+    background: linear-gradient(135deg, rgba(30, 27, 75, 0.6), rgba(15, 23, 42, 0.95));
+    border: 1.5px solid rgba(234, 179, 8, 0.4);
+    border-radius: 18px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.vault-stats-banner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin: 18px 0;
+}
+
+.vault-stat-item-box {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.vault-stat-item-box .stat-icon {
+    font-size: 2rem;
+}
+
+.vault-stat-item-box .stat-label {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.vault-stat-item-box .stat-value {
+    font-size: 1.25rem;
+    font-weight: 900;
+    color: #facc15;
+    margin-top: 2px;
+}
+
+.vault-members-payout-section {
+    background: rgba(10, 15, 28, 0.85);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 14px;
+    padding: 16px 20px;
+    margin-top: 14px;
+}
+
+.vault-members-payout-title {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--accent-gold);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vault-payout-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.vault-member-payout-card {
+    background: rgba(20, 29, 50, 0.7);
+    border-radius: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: transform 0.2s ease;
+}
+
+.vault-member-payout-card:hover {
+    transform: translateY(-2px);
+}
+
+.vault-member-payout-card.mohamed { border-right: 4px solid #38bdf8; }
+.vault-member-payout-card.amy { border-right: 4px solid #ec4899; }
+.vault-member-payout-card.abdo { border-right: 4px solid #f97316; }
+.vault-member-payout-card.vault { border-right: 4px solid #eab308; }
+
+.vault-payout-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.vault-payout-member-name {
+    font-weight: 800;
+    font-size: 0.92rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.vault-payout-expected-val {
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: var(--accent-gold);
+}
+
+.vault-payout-meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+}
+
+/* SMART VAULT ITEM CARDS */
+.vault-item-card-smart {
+    background: rgba(14, 21, 38, 0.85);
+    border: 1.5px solid rgba(234, 179, 8, 0.3);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.25s ease;
+}
+
+.vault-item-card-smart:hover {
+    border-color: rgba(234, 179, 8, 0.7);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(234, 179, 8, 0.15);
+}
+
+.vault-item-card-smart.has-stock {
+    background: rgba(17, 24, 39, 0.95);
+    border-color: rgba(234, 179, 8, 0.6);
+}
+
+.vault-expected-revenue-box {
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(15, 23, 42, 0.8));
+    border: 1px dashed rgba(234, 179, 8, 0.4);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.vault-member-shares-list {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 8px 0 12px;
+}
+
+.vault-member-share-pill {
+    background: rgba(15, 23, 42, 0.75);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.76rem;
+    border: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.vault-member-share-pill.mohamed { color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); }
+.vault-member-share-pill.amy { color: #f472b6; border-color: rgba(244, 114, 182, 0.4); }
+.vault-member-share-pill.abdo { color: #fb923c; border-color: rgba(251, 146, 60, 0.4); }
+.vault-member-share-pill.vault { color: #facc15; border-color: rgba(250, 204, 21, 0.4); }
+
 /* GRAND WAREHOUSE SECTION */
 .master-warehouse-header {
     background: rgba(12, 17, 30, 0.6);

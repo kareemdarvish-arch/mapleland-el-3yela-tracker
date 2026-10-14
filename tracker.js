@@ -107,6 +107,76 @@ function formatMesoCompact(num) {
     return formatNumber(num) + ' ميسو';
 }
 
+let currentSellItemId = null;
+
+// SMART PRICING: Calculate actual weighted average from past salesLog or fallback to initial catalog price
+function getSmartItemPrice(itemId) {
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    if (!itemObj) return 0;
+    if (itemObj.id === 'raw_meso') return 1;
+
+    const sales = (appState.salesLog || []).filter(s => s.itemId === itemId && s.soldQty > 0 && s.totalRevenue > 0);
+    if (sales.length > 0) {
+        let totalRev = 0;
+        let totalQ = 0;
+        sales.forEach(s => {
+            totalRev += (Number(s.totalRevenue) || 0);
+            totalQ += (Number(s.soldQty) || 0);
+        });
+        if (totalQ > 0) {
+            return Math.round(totalRev / totalQ);
+        }
+    }
+
+    return itemObj.price || 0;
+}
+
+function getItemPriceMeta(itemId) {
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    if (!itemObj) return { price: 0, isActual: false, salesCount: 0, totalSoldQty: 0 };
+    if (itemObj.id === 'raw_meso') return { price: 1, isActual: true, salesCount: 1, totalSoldQty: 0 };
+
+    const sales = (appState.salesLog || []).filter(s => s.itemId === itemId && s.soldQty > 0 && s.totalRevenue > 0);
+    if (sales.length > 0) {
+        let totalRev = 0;
+        let totalQ = 0;
+        sales.forEach(s => {
+            totalRev += (Number(s.totalRevenue) || 0);
+            totalQ += (Number(s.soldQty) || 0);
+        });
+        const avg = totalQ > 0 ? Math.round(totalRev / totalQ) : (itemObj.price || 0);
+        return {
+            price: avg,
+            isActual: true,
+            salesCount: sales.length,
+            totalSoldQty: totalQ
+        };
+    }
+
+    return {
+        price: itemObj.price || 0,
+        isActual: false,
+        salesCount: 0,
+        totalSoldQty: 0
+    };
+}
+
+function applySuggestedPrice(price) {
+    const unitInput = document.getElementById('sell-input-unit-price');
+    if (unitInput) {
+        unitInput.value = price;
+        onSellInputsChange('unit');
+    }
+}
+
+function applyMemberSuggestedPrice(price) {
+    const unitInput = document.getElementById('member-sell-input-unit-price');
+    if (unitInput) {
+        unitInput.value = price;
+        onMemberSellInputsChange('unit');
+    }
+}
+
 // 5. INITIALIZATION
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. Connect to Database (Firebase or Local)
@@ -249,46 +319,78 @@ function renderMemberPanels() {
     vaultPanel.id = 'panel-vault';
 
     vaultPanel.innerHTML = `
-        <!-- VAULT HEADER -->
-        <div class="member-card-header">
-            <div class="member-info-left">
-                <div class="member-avatar-lg">🏛️</div>
-                <div class="member-name-box">
-                    <h3>المخزن العام المشترك</h3>
-                    <span class="member-role-badge" style="background: rgba(234, 179, 8, 0.18); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4);">
-                        📦 رصيد مستقل عام (لا يتبع لأي عضو)
-                    </span>
+        <!-- SMART VAULT DASHBOARD HEADER -->
+        <div class="vault-smart-header-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                <div class="member-info-left">
+                    <div class="member-avatar-lg" style="background: rgba(234, 179, 8, 0.2); border: 2px solid #eab308; font-size: 2.2rem; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; border-radius: 14px;">🏛️</div>
+                    <div class="member-name-box">
+                        <h3 style="font-size: 1.4rem; color: #facc15; display: flex; align-items: center; gap: 8px;">
+                            <span>المخزن الذكي المشترك</span>
+                            <span style="font-size: 0.8rem; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); padding: 2px 10px; border-radius: 20px; font-weight: 700;">
+                                ✨ تسعير ذكي وتجميع تلقائي
+                            </span>
+                        </h3>
+                        <p style="font-size: 0.84rem; color: var(--text-muted); margin-top: 4px;">
+                            تجميع إجمالي لدروبات جميع أفراد الفريق (محمد + طنط ايمي + عبدالرحمن + المخزن) مع حساب الفلوس المتوقعة ونصيب كل عضو بناءً على متوسطات أسعار البيع الفعلية!
+                        </p>
+                    </div>
+                </div>
+
+                <div class="member-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn-member-action" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 900; border: none; padding: 8px 16px; border-radius: 10px;" onclick="openUniversalSellModal()" title="بيع أي عنصر من المخزن الكلي وتحديد سعر البيع">
+                        💰 بيع وتحديد السعر
+                    </button>
+                    <button class="btn-member-action" style="background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4); border-radius: 10px;" onclick="openVaultBulkAddModal()" title="إضافة سريعة أو توريد عناصر للمخزن العام">
+                        📥 توريد للمخزن
+                    </button>
+                    <button class="btn-member-action" style="border-radius: 10px;" onclick="copyVaultReport()" title="نسخ تقرير المخزن الشامل">
+                        📋 تقرير
+                    </button>
                 </div>
             </div>
 
-            <div class="member-stats-strip">
-                <div class="member-stat-strip-item">
-                    <span class="member-stat-strip-label">📦 إجمالي قطع المخزن:</span>
-                    <span class="member-stat-strip-val val-items" id="member-items-vault" style="color: #facc15;">0 قطعة</span>
+            <!-- VAULT AGGREGATE STATS BANNER -->
+            <div class="vault-stats-banner">
+                <div class="vault-stat-item-box">
+                    <span class="stat-icon">📦</span>
+                    <div>
+                        <div class="stat-label">إجمالي قطع المخزن الكلي</div>
+                        <div class="stat-value" id="vault-stat-total-items" style="color: #38bdf8;">0 قطعة</div>
+                    </div>
                 </div>
-                <div class="member-stat-strip-item">
-                    <span class="member-stat-strip-label">💰 رصيد كاش مبيعات المخزن:</span>
-                    <span class="member-stat-strip-val val-meso" id="member-meso-vault" style="color: var(--accent-gold);">0 ميسو</span>
+                <div class="vault-stat-item-box" style="border-color: rgba(16, 185, 129, 0.4); background: rgba(6, 78, 59, 0.2);">
+                    <span class="stat-icon">💰</span>
+                    <div>
+                        <div class="stat-label">إجمالي الفلوس المتوقعة (متوسطات البيع الذكية ✨)</div>
+                        <div class="stat-value" id="vault-stat-expected-meso" style="color: #34d399;">0 ميسو</div>
+                    </div>
+                </div>
+                <div class="vault-stat-item-box" style="border-color: rgba(234, 179, 8, 0.4); background: rgba(234, 179, 8, 0.1);">
+                    <span class="stat-icon">💵</span>
+                    <div>
+                        <div class="stat-label">رصيد الكاش المحصل حالياً من البيع</div>
+                        <div class="stat-value" id="vault-stat-actual-cash" style="color: var(--accent-gold);">0 ميسو</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="member-actions">
-                <button class="btn-member-action" style="background: linear-gradient(135deg, #eab308, #ca8a04); color: #000; font-weight: 900; border: none;" onclick="openVaultBulkAddModal()" title="إضافة سريعة أو توريد عناصر للمخزن">
-                    📥 توريد عناصر
-                </button>
-                <button class="btn-member-action reset" onclick="confirmResetVault()" title="تصفير محتويات المخزن العام">
-                    🗑️ تصفير
-                </button>
-                <button class="btn-member-action" onclick="copyVaultReport()" title="نسخ تقرير المخزن العام">
-                    📋 تقرير
-                </button>
+            <!-- MEMBERS EXPECTED PAYOUT SHARE SECTION -->
+            <div class="vault-members-payout-section">
+                <div class="vault-members-payout-title">
+                    <span>👥</span>
+                    <span>التوزيع العادل التقديري - أرباح ونصيب كل عضو المتوقع عند بيع المخزن:</span>
+                </div>
+                <div class="vault-payout-grid" id="vault-members-payout-grid">
+                    <!-- Populated dynamically via updateCalculations() -->
+                </div>
             </div>
         </div>
 
         <!-- CONTROLS & FILTERS -->
         <div class="tracker-controls-bar">
             <div class="search-wrapper">
-                <input type="text" class="tracker-search-input" placeholder="🔍 ابحث في عناصر المخزن العام (شمس، جارنت، كريستال...)" oninput="handleSearch(this.value, 'vault')">
+                <input type="text" class="tracker-search-input" placeholder="🔍 ابحث في عناصر المخزن الذكي (شمس، جارنت، كريستال...)" oninput="handleSearch(this.value, 'vault')">
             </div>
 
             <div class="category-filter-chips">
@@ -420,68 +522,124 @@ function renderVaultItemCards() {
             if (!matchKo && !matchAr) return '';
         }
 
+        // 1. Smart Aggregate: Total pieces across Mohamed, Amy, Abdo, and Vault
+        let totalWarehouseQty = 0;
+        const memberBreakdown = {};
+        TEAM_MEMBERS.forEach(m => {
+            const q = (appState.members[m.id]?.items?.[item.id]) || 0;
+            memberBreakdown[m.id] = q;
+            totalWarehouseQty += q;
+        });
         const vaultQty = vaultItems[item.id] || 0;
+        memberBreakdown['vault'] = vaultQty;
+        totalWarehouseQty += vaultQty;
+
+        const hasStock = totalWarehouseQty > 0;
         const bagQty = getAccountBagQty(item.id);
-        const hasQty = vaultQty > 0;
+
+        // 2. Smart Dynamic Average Price
+        const meta = getItemPriceMeta(item.id);
+        const smartPrice = meta.price;
+        const expectedTotalMeso = totalWarehouseQty * smartPrice;
 
         return `
-            <div class="tracker-item-card ${hasQty ? 'has-qty' : ''}" id="card-vault-${item.id}" style="${hasQty ? 'border-color: rgba(234, 179, 8, 0.6);' : ''}">
+            <div class="tracker-item-card vault-item-card-smart ${hasStock ? 'has-stock' : ''}" id="card-vault-${item.id}">
                 <div class="item-card-top">
                     <div class="item-thumb-box">
                         <img src="${item.icon}" alt="${item.nameKo}" loading="lazy">
                     </div>
-                    <div class="item-card-titles">
+                    <div class="item-card-titles" style="flex: 1;">
                         <span class="item-korean-name">${item.nameKo}</span>
                         <span class="item-arabic-name">${item.nameAr}</span>
                         <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
-                            <span class="item-price-chip ${item.priceType}">
-                                🏷️ ${item.badge}
-                            </span>
-                            <span class="account-bag-badge" title="رصيد شنطة اللعبة الإجمالية الآن">
+                            ${meta.isActual ? `
+                                <span class="item-price-chip" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.5);" title="متوسط سعر البيع الفعلي المحسوب تلقائياً من ${meta.salesCount} عمليات بيع سابقة (${formatNumber(meta.totalSoldQty)} قطعة)">
+                                    🏷️ متوسط البيع: ${formatNumber(smartPrice)} ميسو (من المبيعات ✨)
+                                </span>
+                            ` : `
+                                <span class="item-price-chip ${item.priceType}" title="سعر استرشادي مبدئي من الدليل">
+                                    🏷️ سعر مبدئي: ${formatNumber(smartPrice)} ميسو
+                                </span>
+                            `}
+                            <span class="account-bag-badge" title="رصيد شنطة الحساب الإجمالية في اللعبة">
                                 🎒 إجمالي الشنطة: <strong>${formatNumber(bagQty)}</strong>
                             </span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Vault Stock Box -->
-                <div style="background: rgba(15, 23, 42, 0.7); border: 1.5px solid rgba(234, 179, 8, 0.35); border-radius: 12px; padding: 10px 14px; margin: 12px 0 10px; display: flex; align-items: center; justify-content: space-between;">
-                    <span style="font-size: 0.86rem; color: #cbd5e1; font-weight: 700;">🏛️ الرصيد في المخزن:</span>
+                <!-- Warehouse Stock Quantity Display -->
+                <div style="background: rgba(15, 23, 42, 0.75); border: 1.5px solid rgba(234, 179, 8, 0.35); border-radius: 12px; padding: 10px 14px; margin: 12px 0 8px; display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 0.86rem; color: #cbd5e1; font-weight: 700;">🏛️ إجمالي المتوفر بالمخزن:</span>
                     <strong id="vault-qty-val-${item.id}" style="font-size: 1.25rem; color: #facc15; font-weight: 900;">
-                        ${formatNumber(vaultQty)} ${item.id === 'raw_meso' ? 'ميسو كاش' : 'قطعة'}
+                        ${formatNumber(totalWarehouseQty)} ${item.id === 'raw_meso' ? 'ميسو كاش' : 'قطعة'}
                     </strong>
                 </div>
 
-                <!-- Stepper & Direct Input -->
-                <div class="manual-stepper-wrap open" style="margin-top: 6px;">
+                <!-- Expected Meso Revenue Box -->
+                ${item.id !== 'raw_meso' ? `
+                    <div class="vault-expected-revenue-box">
+                        <span style="font-size: 0.82rem; color: #94a3b8; font-weight: 700;">💰 الفلوس المتوقعة:</span>
+                        <div style="text-align: left;">
+                            <strong style="color: var(--accent-gold); font-size: 1.05rem;">~${formatMesoCompact(expectedTotalMeso)}</strong>
+                            <div style="font-size: 0.72rem; color: #94a3b8;">(${formatNumber(totalWarehouseQty)} × ${formatNumber(smartPrice)})</div>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- Member Shares Breakdown Pills -->
+                <div class="vault-member-shares-list">
+                    <span class="vault-member-share-pill mohamed" title="مساهمة محمد">
+                        🧙‍♂️ محمد: <strong>${formatNumber(memberBreakdown['mohamed'] || 0)}</strong>
+                        ${item.id !== 'raw_meso' && (memberBreakdown['mohamed'] || 0) > 0 ? ` (~${formatMesoCompact((memberBreakdown['mohamed'] || 0) * smartPrice)})` : ''}
+                    </span>
+                    <span class="vault-member-share-pill amy" title="مساهمة طنط ايمي">
+                        🧝‍♀️ طنط ايمي: <strong>${formatNumber(memberBreakdown['amy'] || 0)}</strong>
+                        ${item.id !== 'raw_meso' && (memberBreakdown['amy'] || 0) > 0 ? ` (~${formatMesoCompact((memberBreakdown['amy'] || 0) * smartPrice)})` : ''}
+                    </span>
+                    <span class="vault-member-share-pill abdo" title="مساهمة عبدالرحمن">
+                        🏹 عبدالرحمن: <strong>${formatNumber(memberBreakdown['abdo'] || 0)}</strong>
+                        ${item.id !== 'raw_meso' && (memberBreakdown['abdo'] || 0) > 0 ? ` (~${formatMesoCompact((memberBreakdown['abdo'] || 0) * smartPrice)})` : ''}
+                    </span>
+                    ${vaultQty > 0 ? `
+                        <span class="vault-member-share-pill vault" title="رصيد عام مستقل">
+                            🏛️ عام: <strong>${formatNumber(vaultQty)}</strong>
+                            ${item.id !== 'raw_meso' ? ` (~${formatMesoCompact(vaultQty * smartPrice)})` : ''}
+                        </span>
+                    ` : ''}
+                </div>
+
+                <!-- Stepper for direct Vault adjustments (collapsible) -->
+                <div class="manual-stepper-wrap" id="manual-wrap-vault-${item.id}">
+                    <div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 4px;">تعديل الرصيد العام المشترك (غير المنسوب لأعضاء):</div>
                     <div class="stepper-row">
                         <button class="btn-stepper" onclick="modifyVaultQty('${item.id}', -1)" title="طرح 1">−</button>
-                        <input type="number" min="0" class="stepper-input" id="input-vault-${item.id}" value="${vaultQty}" onchange="setDirectVaultQty('${item.id}', this.value)" oninput="setDirectVaultQty('${item.id}', this.value)" placeholder="العدد...">
+                        <input type="number" min="0" class="stepper-input" id="input-vault-${item.id}" value="${vaultQty}" onchange="setDirectVaultQty('${item.id}', this.value)" oninput="setDirectVaultQty('${item.id}', this.value)" placeholder="الرصيد العام...">
                         <button class="btn-stepper" onclick="modifyVaultQty('${item.id}', 1)" title="إضافة 1">+</button>
-                    </div>
-                    <div class="quick-add-row" style="margin-top: 6px;">
-                        <button class="btn-quick-add" onclick="modifyVaultQty('${item.id}', 10)">+10</button>
-                        <button class="btn-quick-add" onclick="modifyVaultQty('${item.id}', 50)">+50</button>
-                        <button class="btn-quick-add" onclick="modifyVaultQty('${item.id}', 100)">+100</button>
-                        <button class="btn-quick-add" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3);" onclick="modifyVaultQty('${item.id}', -10)">-10</button>
-                        <button class="btn-quick-add" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3);" onclick="modifyVaultQty('${item.id}', -50)">-50</button>
                     </div>
                 </div>
 
                 <!-- Card Actions Row -->
                 <div class="card-actions-row" style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                     ${item.id !== 'raw_meso' ? `
-                        <button class="btn-card-sell" style="background: linear-gradient(135deg, #eab308, #ca8a04); color: #000; font-weight: 900; border: none; padding: 6px 14px; border-radius: 8px;" onclick="openVaultSellModal('${item.id}')" title="بيع وتصفير هذا العنصر من المخزن وتحديد السعر">
-                            💰 بيع من المخزن
+                        <button class="btn-card-sell" style="flex: 1; background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 900; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer;" onclick="openGrandSellModal('${item.id}')" title="بيع وتصفير هذا العنصر من المخزن الكلي وتحديد سعر البيع">
+                            💰 بيع وتحديد السعر
                         </button>
                     ` : '<span style="color: var(--accent-gold); font-size: 0.85rem; font-weight: 800;">كاش ميسو مباشر</span>'}
-                    <button class="btn-card-fix" onclick="setDirectVaultQty('${item.id}', 0)" title="تصفير هذا العنصر في المخزن فقط">
-                        🗑️ تصفير
+                    <button class="btn-toggle-manual" onclick="toggleVaultManual('${item.id}')" title="تعديل الرصيد العام المستقل">
+                        ⚙️ رصيد عام
                     </button>
                 </div>
             </div>
         `;
     }).join('');
+}
+
+function toggleVaultManual(itemId) {
+    const wrap = document.getElementById(`manual-wrap-vault-${itemId}`);
+    if (wrap) {
+        wrap.classList.toggle('open');
+    }
 }
 
 function modifyVaultQty(itemId, delta) {
@@ -832,6 +990,91 @@ function updateCalculations() {
     // Update Vault column card total in side-by-side view
     const colTotalVaultEl = document.getElementById('column-total-vault');
     if (colTotalVaultEl) colTotalVaultEl.innerText = `${formatMesoCompact(vaultMeso)} كاش`;
+
+    // 1B. CALCULATE DYNAMIC EXPECTED MESO REVENUE PER MEMBER & VAULT
+    const memberExpectedMeso = {};
+    TEAM_MEMBERS.forEach(m => memberExpectedMeso[m.id] = 0);
+    let vaultExpectedMeso = 0;
+    let totalExpectedWarehouseRevenue = 0;
+
+    ITEM_CATALOG.forEach(item => {
+        if (item.id === 'raw_meso') return;
+        const smartPrice = getSmartItemPrice(item.id);
+
+        let itemTotalQty = 0;
+        TEAM_MEMBERS.forEach(m => {
+            const q = (appState.members[m.id]?.items?.[item.id]) || 0;
+            if (q > 0) {
+                memberExpectedMeso[m.id] += (q * smartPrice);
+                itemTotalQty += q;
+            }
+        });
+
+        const vq = (appState.vault?.items?.[item.id]) || 0;
+        if (vq > 0) {
+            vaultExpectedMeso += (vq * smartPrice);
+            itemTotalQty += vq;
+        }
+
+        totalExpectedWarehouseRevenue += (itemTotalQty * smartPrice);
+    });
+
+    // Update Smart Vault Dashboard stats & members expected payout share
+    const vaultStatItems = document.getElementById('vault-stat-total-items');
+    const vaultStatExp = document.getElementById('vault-stat-expected-meso');
+    const vaultStatCash = document.getElementById('vault-stat-actual-cash');
+    if (vaultStatItems) vaultStatItems.innerText = `${formatNumber(grandTotalItems)} قطعة`;
+    if (vaultStatExp) vaultStatExp.innerText = `~${formatMesoCompact(totalExpectedWarehouseRevenue)}`;
+    if (vaultStatCash) vaultStatCash.innerText = `${formatMesoCompact(grandTotalMeso)} كاش`;
+
+    const vaultPayoutGrid = document.getElementById('vault-members-payout-grid');
+    if (vaultPayoutGrid) {
+        vaultPayoutGrid.innerHTML = TEAM_MEMBERS.map(m => {
+            const cash = memberTotals[m.id].meso;
+            const exp = memberExpectedMeso[m.id] || 0;
+            const totalWealth = cash + exp;
+            const itemsCount = memberTotals[m.id].items;
+            return `
+                <div class="vault-member-payout-card ${m.id}">
+                    <div class="vault-payout-card-header">
+                        <span class="vault-payout-member-name">${m.avatar} ${m.name}</span>
+                        <span style="font-size: 0.78rem; color: #38bdf8; font-weight: 700;">${formatNumber(itemsCount)} قطعة</span>
+                    </div>
+                    <div style="margin: 4px 0;">
+                        <div style="font-size: 0.76rem; color: var(--text-muted);">الأرباح المتوقعة من دروباته:</div>
+                        <div class="vault-payout-expected-val">~${formatMesoCompact(exp)}</div>
+                    </div>
+                    <div class="vault-payout-meta-row">
+                        <span>💵 كاش محصل حالياً:</span>
+                        <strong style="color: #34d399;">${formatMesoCompact(cash)}</strong>
+                    </div>
+                    <div class="vault-payout-meta-row" style="border-top: 1px dashed var(--border-color); padding-top: 4px; margin-top: 4px;">
+                        <span>💰 الإجمالي التقديري:</span>
+                        <strong style="color: var(--accent-gold);">~${formatMesoCompact(totalWealth)}</strong>
+                    </div>
+                </div>
+            `;
+        }).join('') + (vaultMeso > 0 || vaultExpectedMeso > 0 ? `
+            <div class="vault-member-payout-card vault">
+                <div class="vault-payout-card-header">
+                    <span class="vault-payout-member-name">🏛️ المخزن العام</span>
+                    <span style="font-size: 0.78rem; color: #facc15; font-weight: 700;">${formatNumber(vaultItemsCount)} قطعة</span>
+                </div>
+                <div style="margin: 4px 0;">
+                    <div style="font-size: 0.76rem; color: var(--text-muted);">الأرباح المتوقعة من رصيد المخزن:</div>
+                    <div class="vault-payout-expected-val" style="color: #facc15;">~${formatMesoCompact(vaultExpectedMeso)}</div>
+                </div>
+                <div class="vault-payout-meta-row">
+                    <span>💵 كاش رصيد المخزن:</span>
+                    <strong style="color: #34d399;">${formatMesoCompact(vaultMeso)}</strong>
+                </div>
+                <div class="vault-payout-meta-row" style="border-top: 1px dashed var(--border-color); padding-top: 4px; margin-top: 4px;">
+                    <span>💰 الإجمالي التقديري:</span>
+                    <strong style="color: var(--accent-gold);">~${formatMesoCompact(vaultMeso + vaultExpectedMeso)}</strong>
+                </div>
+            </div>
+        ` : '');
+    }
 
     // 1. UPDATE MASTER GRAND TOTAL CARD
     const masterMesoEl = document.getElementById('master-total-meso');
@@ -1685,7 +1928,9 @@ function onUniversalItemSelect(itemId) {
 }
 
 function openGrandSellModal(itemId) {
-    openUniversalSellModal(itemId);
+    const selectWrap = document.getElementById('sell-item-select-wrap');
+    if (selectWrap) selectWrap.style.display = 'none';
+    openSellModal(itemId);
 }
 
 function openSellModal(itemId) {
@@ -1722,6 +1967,45 @@ function openSellModal(itemId) {
     // Price starts EMPTY - user MUST enter real selling price!
     document.getElementById('sell-input-unit-price').value = '';
     document.getElementById('sell-input-total-price').value = '';
+
+    // Render Smart Price Hint
+    const meta = getItemPriceMeta(itemId);
+    const hintBox = document.getElementById('sell-smart-price-hint');
+    if (hintBox) {
+        if (meta.isActual) {
+            hintBox.innerHTML = `
+                <div class="smart-price-badge-box actual">
+                    <div class="smart-price-text">
+                        <span class="smart-price-icon">✨</span>
+                        <div>
+                            <strong style="color: #34d399; font-size: 0.92rem;">متوسط سعر البيع الفعلي المسجل: ${formatNumber(meta.price)} ميسو / للقطعة</strong>
+                            <div style="font-size: 0.76rem; color: #94a3b8;">محسوب تلقائياً من ${meta.salesCount} عمليات بيع سابقة (${formatNumber(meta.totalSoldQty)} قطعة بيعت بالفعل)</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-use-smart-price" onclick="applySuggestedPrice(${meta.price})">
+                        استخدام هذا السعر تلقائياً 🎯
+                    </button>
+                </div>
+            `;
+        } else if (meta.price > 0) {
+            hintBox.innerHTML = `
+                <div class="smart-price-badge-box guide">
+                    <div class="smart-price-text">
+                        <span class="smart-price-icon">💡</span>
+                        <div>
+                            <strong style="color: #facc15; font-size: 0.92rem;">السعر الاسترشادي المبدئي: ${formatNumber(meta.price)} ميسو / للقطعة</strong>
+                            <div style="font-size: 0.76rem; color: #94a3b8;">لم يتم تسجيل بيع لهذا العنصر بعد، هذا السعر مقترح من الدليل</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-use-smart-price" onclick="applySuggestedPrice(${meta.price})">
+                        استخدام هذا السعر 🎯
+                    </button>
+                </div>
+            `;
+        } else {
+            hintBox.innerHTML = '';
+        }
+    }
 
     onSellInputsChange('qty');
     modal.classList.add('open');
@@ -2017,6 +2301,45 @@ function openMemberSellModal(memberId, itemId) {
     document.getElementById('member-sell-input-qty').value = curMemberQty;
     document.getElementById('member-sell-input-unit-price').value = '';
     document.getElementById('member-sell-input-total-price').value = '';
+
+    // Render Smart Price Hint for member sale
+    const meta = getItemPriceMeta(itemId);
+    const memberHintBox = document.getElementById('member-sell-smart-price-hint');
+    if (memberHintBox) {
+        if (meta.isActual) {
+            memberHintBox.innerHTML = `
+                <div class="smart-price-badge-box actual">
+                    <div class="smart-price-text">
+                        <span class="smart-price-icon">✨</span>
+                        <div>
+                            <strong style="color: #34d399; font-size: 0.92rem;">متوسط سعر البيع الفعلي المسجل: ${formatNumber(meta.price)} ميسو / للقطعة</strong>
+                            <div style="font-size: 0.76rem; color: #94a3b8;">محسوب تلقائياً من ${meta.salesCount} عمليات بيع سابقة (${formatNumber(meta.totalSoldQty)} قطعة)</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-use-smart-price" onclick="applyMemberSuggestedPrice(${meta.price})">
+                        استخدام هذا السعر تلقائياً 🎯
+                    </button>
+                </div>
+            `;
+        } else if (meta.price > 0) {
+            memberHintBox.innerHTML = `
+                <div class="smart-price-badge-box guide">
+                    <div class="smart-price-text">
+                        <span class="smart-price-icon">💡</span>
+                        <div>
+                            <strong style="color: #facc15; font-size: 0.92rem;">السعر الاسترشادي المبدئي: ${formatNumber(meta.price)} ميسو / للقطعة</strong>
+                            <div style="font-size: 0.76rem; color: #94a3b8;">سعر مقترح من الدليل</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-use-smart-price" onclick="applyMemberSuggestedPrice(${meta.price})">
+                        استخدام هذا السعر 🎯
+                    </button>
+                </div>
+            `;
+        } else {
+            memberHintBox.innerHTML = '';
+        }
+    }
 
     onMemberSellInputsChange('qty');
     modal.classList.add('open');
