@@ -37,6 +37,11 @@
                 🔥 قاعدة البيانات
             </button>
 
+            <!-- Shift History Modal Button -->
+            <button class="btn-nav" onclick="openShiftHistoryModal()" title="سجل الورديات الأخير ومن قام بزيادة العناصر وتاريخها">
+                📜 سجل الورديات
+            </button>
+
             <!-- Copy Full Team Report for Chat/Discord -->
             <button class="btn-nav" onclick="copyTeamReport()" title="نسخ تقرير شامل للدروبات والميسو للمحادثة">
                 📋 تقرير الفريق
@@ -93,8 +98,16 @@
                 <div class="master-stat-box total-items">
                     <div class="master-stat-icon">📦</div>
                     <div class="master-stat-info">
-                        <div class="master-stat-label">إجمالي عدد القطع والدروبات المجمعة</div>
+                        <div class="master-stat-label">إجمالي القطع المجمعة (الفارمينج)</div>
                         <div class="master-stat-num" id="master-total-items">0 قطعة</div>
+                    </div>
+                </div>
+
+                <div class="master-stat-box total-bag" style="border-color: rgba(251,191,36,0.4);">
+                    <div class="master-stat-icon" style="background: rgba(251,191,36,0.15); color: var(--accent-gold);">🎒</div>
+                    <div class="master-stat-info">
+                        <div class="master-stat-label">إجمالي العناصر في شنطة الإيميل الحالية</div>
+                        <div class="master-stat-num" id="master-total-bag" style="color: var(--accent-gold);">0 قطعة</div>
                     </div>
                 </div>
 
@@ -254,7 +267,87 @@
     </div>
 
     <!-- ======================================================== -->
-    <!-- 6. FLOATING TOAST FEEDBACK -->
+    <!-- 6. MANUAL CORRECTION / FIX MODAL -->
+    <!-- ======================================================== -->
+    <div class="modal-overlay" id="fix-modal" onclick="if(event.target===this) closeFixModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✏️ تصحيح يدوي سريع للأخطاء</h3>
+                <button class="btn-modal-close" onclick="closeFixModal()" type="button">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.88rem; color: #94a3b8;">
+                    إذا حدث خطأ أو كتبت رقماً غير مقصود، يمكنك هنا تعديل رصيد اللاعب أو رصيد شنطة الإيميل مباشرة في ثانية واحدة!
+                </p>
+                <div class="settings-box">
+                    <h4 id="fix-item-title">📦 تعديل العنصر</h4>
+                    <input type="hidden" id="fix-target-member">
+                    <input type="hidden" id="fix-target-item">
+
+                    <div class="form-group">
+                        <label for="fix-member-qty" id="fix-member-label">الكمية المحسوبة لصالح اللاعب:</label>
+                        <input type="number" min="0" id="fix-member-qty" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fix-bag-qty">الرصيد الفعلي الموجود في شنطة اللعبة الآن:</label>
+                        <input type="number" min="0" id="fix-bag-qty" class="form-input">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeFixModal()" type="button">إلغاء</button>
+                <button class="btn-primary" onclick="saveItemFix()" type="button">💾 حفظ التصحيح الآن</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- 7. FULL SHIFT QUICK LOGGER MODAL -->
+    <!-- ======================================================== -->
+    <div class="modal-overlay" id="full-shift-modal" onclick="if(event.target===this) closeFullShiftModal()">
+        <div class="modal-content" style="max-width: 750px;">
+            <div class="modal-header">
+                <h3 id="full-shift-title">✨ جرد شنطة الإيميل السريع بعد اللعب</h3>
+                <button class="btn-modal-close" onclick="closeFullShiftModal()" type="button">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.88rem; color: #cbd5e1;">
+                    اكتب الكمية التي تراها في شنطة شخصية MapleLand الآن أمام كل عنصر قمت بجمعه، وسيقوم التراكر تلقائياً بحساب الفارق وإضافته لصالحك!
+                </p>
+                <div class="full-shift-list" id="full-shift-list-body">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeFullShiftModal()" type="button">إلغاء</button>
+                <button class="btn-primary" onclick="commitFullShift()" type="button">🚀 تأكيد وحساب دروبات الوردية</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- 8. SHIFT HISTORY LOG MODAL -->
+    <!-- ======================================================== -->
+    <div class="modal-overlay" id="history-modal" onclick="if(event.target===this) closeShiftHistoryModal()">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3>📜 سجل الورديات والجرد الأخير المشترك</h3>
+                <button class="btn-modal-close" onclick="closeShiftHistoryModal()" type="button">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="history-timeline" id="history-list-body">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeShiftHistoryModal()" type="button">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- 9. FLOATING TOAST FEEDBACK -->
     <!-- ======================================================== -->
     <div class="toast-notice" id="toast-notice"></div>
 

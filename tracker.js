@@ -61,11 +61,28 @@ let appState = {
         amy: { items: {} },
         abdo: { items: {} }
     },
+    accountInventory: {},
+    shiftLog: [],
     activeTab: 'mohamed',
     activeCategory: 'all',
     searchQuery: '',
     isMasterTableOpen: false
 };
+
+function getMember(memberId) {
+    return TEAM_MEMBERS.find(m => m.id === memberId) || { id: memberId, name: memberId, avatar: '👤' };
+}
+
+function getAccountBagQty(itemId) {
+    if (appState.accountInventory && appState.accountInventory[itemId] !== undefined) {
+        return Number(appState.accountInventory[itemId]) || 0;
+    }
+    let sum = 0;
+    TEAM_MEMBERS.forEach(m => {
+        sum += (appState.members[m.id]?.items[itemId] || 0);
+    });
+    return sum;
+}
 
 // 4. FORMATTING UTILITIES
 function formatNumber(num) {
@@ -105,14 +122,18 @@ async function initDatabase() {
     const res = await window.teamDb.initFirebase();
 
     const initial = await window.teamDb.loadInitial();
-    if (initial && initial.data && initial.data.members) {
-        appState.members = initial.data.members;
+    if (initial && initial.data) {
+        if (initial.data.members) appState.members = initial.data.members;
+        if (initial.data.accountInventory) appState.accountInventory = initial.data.accountInventory;
+        if (initial.data.shiftLog) appState.shiftLog = initial.data.shiftLog;
     }
 
     // Subscribe to incoming realtime changes (from other players)
     window.teamDb.onDataChange((incomingData, source) => {
-        if (incomingData && incomingData.members) {
-            appState.members = incomingData.members;
+        if (incomingData) {
+            if (incomingData.members) appState.members = incomingData.members;
+            if (incomingData.accountInventory) appState.accountInventory = incomingData.accountInventory;
+            if (incomingData.shiftLog) appState.shiftLog = incomingData.shiftLog;
             refreshAllUI();
             if (source === 'cloud') {
                 showToast("🔄 تم استلام تحديث جديد من الفريق سحابياً!", "cloud");
@@ -172,11 +193,17 @@ function renderMemberPanels() {
                 </div>
 
                 <div class="member-actions">
+                    <button class="btn-member-action" style="background: linear-gradient(135deg, #0284c7, #0284c7); color: #fff; border: none; font-weight: 800;" onclick="openFullShiftModal('${member.id}')" title="جرد الشنطة بعد انتهاء جلسة اللعب لجميع العناصر">
+                        ✨ جرد الشنطة السريع
+                    </button>
+                    <button class="btn-member-action" onclick="openShiftHistoryModal()" title="سجل العمليات السابقة">
+                        📜 سجل الورديات
+                    </button>
                     <button class="btn-member-action reset" onclick="confirmResetMember('${member.id}')">
-                        🗑️ تصفير الحساب
+                        🗑️ تصفير
                     </button>
                     <button class="btn-member-action" onclick="copyMemberReport('${member.id}')">
-                        📋 نسخ ملخص
+                        📋 تقرير
                     </button>
                 </div>
             </div>
@@ -208,6 +235,7 @@ function renderMemberPanels() {
 }
 
 function renderItemCards(memberId) {
+    const member = getMember(memberId);
     const memberItems = appState.members[memberId]?.items || {};
     const query = appState.searchQuery.toLowerCase().trim();
     const cat = appState.activeCategory;
@@ -223,9 +251,10 @@ function renderItemCards(memberId) {
             if (!matchKo && !matchAr) return '';
         }
 
-        const qty = memberItems[item.id] || 0;
-        const totalItemMeso = qty * item.price;
-        const hasQty = qty > 0;
+        const memberQty = memberItems[item.id] || 0;
+        const bagQty = getAccountBagQty(item.id);
+        const totalItemMeso = memberQty * item.price;
+        const hasQty = memberQty > 0;
 
         return `
             <div class="tracker-item-card ${hasQty ? 'has-qty' : ''}" id="card-${memberId}-${item.id}">
@@ -236,31 +265,63 @@ function renderItemCards(memberId) {
                     <div class="item-card-titles">
                         <span class="item-korean-name">${item.nameKo}</span>
                         <span class="item-arabic-name">${item.nameAr}</span>
-                        <span class="item-price-chip ${item.priceType}">
-                            🏷️ ${item.badge} (~${formatNumber(item.price)} للقطعة)
-                        </span>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+                            <span class="item-price-chip ${item.priceType}">
+                                🏷️ ${item.badge} (~${formatNumber(item.price)})
+                            </span>
+                            <span class="account-bag-badge" id="bag-badge-${memberId}-${item.id}" title="رصيد شنطة اللعبة المشتركة الآن">
+                                🎒 في الشنطة: <strong id="bag-val-${item.id}">${formatNumber(bagQty)}</strong>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="stepper-row">
-                    <button class="btn-stepper" onclick="modifyQty('${memberId}', '${item.id}', -1)" title="طرح 1">−</button>
-                    <input type="number" min="0" class="stepper-input" id="input-${memberId}-${item.id}" value="${qty}" onchange="setDirectQty('${memberId}', '${item.id}', this.value)" oninput="setDirectQty('${memberId}', '${item.id}', this.value)">
-                    <button class="btn-stepper" onclick="modifyQty('${memberId}', '${item.id}', 1)" title="إضافة 1">+</button>
+                <!-- Member share pill -->
+                <div class="member-share-pill">
+                    <span>👤 ما جمعه ${member.name}:</span>
+                    <strong id="share-val-${memberId}-${item.id}">${formatNumber(memberQty)} قطعة</strong>
                 </div>
 
-                <div class="quick-add-row">
-                    <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 5)">+5</button>
-                    <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 10)">+10</button>
-                    <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 50)">+50</button>
-                    <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 100)">+100</button>
-                    <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 500)">+500</button>
+                <!-- Smart Shift Box -->
+                <div class="smart-shift-box">
+                    <div class="smart-shift-label">
+                        <span>🎯 جرد نهاية اللعب (العدد في الشنطة الآن):</span>
+                    </div>
+                    <div class="smart-shift-input-group">
+                        <input type="number" min="0" class="shift-bag-input" id="shift-input-${memberId}-${item.id}" placeholder="العدد في الشنطة..." oninput="previewShiftDelta('${memberId}', '${item.id}', this.value)" onkeydown="if(event.key==='Enter') commitShiftDelta('${memberId}', '${item.id}')">
+                        <button class="btn-shift-commit" onclick="commitShiftDelta('${memberId}', '${item.id}')" title="احسب ما تم تجميعه في الوردية">
+                            حساب وإضافة ✨
+                        </button>
+                    </div>
+                    <div class="shift-preview-hint" id="shift-hint-${memberId}-${item.id}"></div>
                 </div>
 
-                <div class="item-card-footer">
-                    <span class="card-total-label">القيمة الإجمالية:</span>
-                    <span class="card-total-meso" id="meso-${memberId}-${item.id}">
+                <!-- Actions Row: Quick Fix & Manual Controls toggle -->
+                <div class="card-actions-row">
+                    <button class="btn-card-fix" onclick="openItemFixModal('${memberId}', '${item.id}')" title="تعديل مباشر في حال حدث خطأ أو كتبت رقم غلط">
+                        ✏️ تصحيح خطأ
+                    </button>
+                    <button class="btn-toggle-manual" onclick="toggleManualWrap('${memberId}', '${item.id}')">
+                        ➕ أزرار الزيادة (+/-)
+                    </button>
+                    <span class="card-total-meso" id="meso-${memberId}-${item.id}" style="font-size: 0.85rem; font-weight: 800; color: var(--accent-gold);">
                         ${formatNumber(totalItemMeso)} ميسو
                     </span>
+                </div>
+
+                <!-- Collapsible Manual Stepper / Quick Add -->
+                <div class="manual-stepper-wrap" id="manual-wrap-${memberId}-${item.id}">
+                    <div class="stepper-row">
+                        <button class="btn-stepper" onclick="modifyQty('${memberId}', '${item.id}', -1)">−</button>
+                        <input type="number" min="0" class="stepper-input" id="input-${memberId}-${item.id}" value="${memberQty}" onchange="setDirectQty('${memberId}', '${item.id}', this.value)" oninput="setDirectQty('${memberId}', '${item.id}', this.value)">
+                        <button class="btn-stepper" onclick="modifyQty('${memberId}', '${item.id}', 1)">+</button>
+                    </div>
+                    <div class="quick-add-row">
+                        <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 5)">+5</button>
+                        <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 10)">+10</button>
+                        <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 50)">+50</button>
+                        <button class="btn-quick-add" onclick="modifyQty('${memberId}', '${item.id}', 100)">+100</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -337,6 +398,16 @@ function updateSingleItemUI(memberId, itemId, qty) {
         input.value = qty;
     }
 
+    const bagVal = document.getElementById(`bag-val-${itemId}`);
+    if (bagVal) {
+        bagVal.innerText = formatNumber(getAccountBagQty(itemId));
+    }
+
+    const shareVal = document.getElementById(`share-val-${memberId}-${itemId}`);
+    if (shareVal) {
+        shareVal.innerText = `${formatNumber(qty)} قطعة`;
+    }
+
     const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
     if (itemObj) {
         const mesoEl = document.getElementById(`meso-${memberId}-${itemId}`);
@@ -359,12 +430,16 @@ function updateSingleItemUI(memberId, itemId, qty) {
 function updateCalculations() {
     let grandTotalMeso = 0;
     let grandTotalItems = 0;
+    let totalBagItems = 0;
     const memberTotals = {};
     const itemAggregates = {};
 
     // Initialize item aggregates
     ITEM_CATALOG.forEach(item => {
         itemAggregates[item.id] = { ...item, totalQty: 0, byMember: {} };
+        if (item.id !== 'raw_meso') {
+            totalBagItems += getAccountBagQty(item.id);
+        }
     });
 
     // Calculate per-member totals
@@ -406,10 +481,12 @@ function updateCalculations() {
     // 1. UPDATE MASTER GRAND TOTAL CARD
     const masterMesoEl = document.getElementById('master-total-meso');
     const masterItemsEl = document.getElementById('master-total-items');
+    const masterBagEl = document.getElementById('master-total-bag');
     const topFarmerEl = document.getElementById('master-top-farmer');
 
     if (masterMesoEl) masterMesoEl.innerText = formatMesoCompact(grandTotalMeso);
     if (masterItemsEl) masterItemsEl.innerText = `${formatNumber(grandTotalItems)} قطعة`;
+    if (masterBagEl) masterBagEl.innerText = `${formatNumber(totalBagItems)} قطعة`;
 
     // Find top contributor
     let topFarmerName = 'لا يوجد حتى الآن';
@@ -802,8 +879,319 @@ function showToast(message, type = 'normal') {
 
 // 17. GLOBAL EVENT LISTENERS
 function setupEventListeners() {
-    // Close modal on escape key
+    // Close modals on escape key
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeSettingsModal();
+        if (e.key === 'Escape') {
+            closeSettingsModal();
+            closeFixModal();
+            closeFullShiftModal();
+            closeShiftHistoryModal();
+        }
     });
+}
+
+// 18. SMART SHIFT & CORRECTION SYSTEM
+function previewShiftDelta(memberId, itemId, enteredVal) {
+    const hint = document.getElementById(`shift-hint-${memberId}-${itemId}`);
+    if (!hint) return;
+
+    if (enteredVal === '' || isNaN(enteredVal)) {
+        hint.innerText = '';
+        hint.className = 'shift-preview-hint';
+        return;
+    }
+
+    const prevBag = getAccountBagQty(itemId);
+    const newBag = parseInt(enteredVal, 10);
+    const delta = newBag - prevBag;
+    const member = getMember(memberId);
+
+    if (delta > 0) {
+        hint.innerHTML = `⚡ الفارق: <strong>+${formatNumber(delta)}</strong> قطعة ستُضاف لـ <strong>${member.name}</strong>`;
+        hint.className = 'shift-preview-hint positive';
+    } else if (delta === 0) {
+        hint.innerText = `نفس رصيد الشنطة السابق (${formatNumber(prevBag)}) دون زيادة`;
+        hint.className = 'shift-preview-hint zero';
+    } else {
+        hint.innerHTML = `⚠️ أقل من رصيد الشنطة السابق بـ <strong>${formatNumber(Math.abs(delta))}</strong> قطعة (بيع/استهلاك)`;
+        hint.className = 'shift-preview-hint negative';
+    }
+}
+
+function commitShiftDelta(memberId, itemId) {
+    const input = document.getElementById(`shift-input-${memberId}-${itemId}`);
+    if (!input || input.value === '') {
+        alert("يرجى كتابة الكمية التي تراها في الشنطة أولاً.");
+        return;
+    }
+
+    const newBag = parseInt(input.value, 10);
+    if (isNaN(newBag) || newBag < 0) {
+        alert("يرجى إدخال رقم صحيح موجب.");
+        return;
+    }
+
+    const prevBag = getAccountBagQty(itemId);
+    const delta = newBag - prevBag;
+    const member = getMember(memberId);
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+
+    if (delta > 0) {
+        if (!appState.members[memberId]) appState.members[memberId] = { items: {} };
+        if (!appState.members[memberId].items) appState.members[memberId].items = {};
+        if (!appState.accountInventory) appState.accountInventory = {};
+
+        // 1. Credit delta to member
+        appState.members[memberId].items[itemId] = (appState.members[memberId].items[itemId] || 0) + delta;
+
+        // 2. Update account bag baseline
+        appState.accountInventory[itemId] = newBag;
+
+        // 3. Log shift entry
+        if (!appState.shiftLog) appState.shiftLog = [];
+        appState.shiftLog.unshift({
+            id: 'shift_' + Date.now(),
+            memberId,
+            memberName: member.name,
+            avatar: member.avatar,
+            itemId,
+            itemNameKo: itemObj ? itemObj.nameKo : itemId,
+            itemNameAr: itemObj ? itemObj.nameAr : itemId,
+            prevBag,
+            newBag,
+            delta,
+            time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+        });
+        if (appState.shiftLog.length > 50) appState.shiftLog.pop();
+
+        showToast(`🎉 تم احتساب +${formatNumber(delta)} قطعة لصالح ${member.name}! (رصيد الشنطة: ${formatNumber(newBag)})`, "cloud");
+
+        input.value = '';
+        const hint = document.getElementById(`shift-hint-${memberId}-${itemId}`);
+        if (hint) { hint.innerText = ''; hint.className = 'shift-preview-hint'; }
+
+        refreshAllUI();
+        saveStateDebounced();
+
+    } else if (delta === 0) {
+        showToast(`ℹ️ رصيد الشنطة لم يتغير (${formatNumber(newBag)} قطعة).`);
+    } else {
+        // Delta < 0
+        const confirmed = confirm(
+            `⚠️ رصيد الشنطة المدخل (${formatNumber(newBag)}) أقل من السابق (${formatNumber(prevBag)}).\n\n` +
+            `الفارق: نقص ${formatNumber(Math.abs(delta))} قطعة.\n` +
+            `هل تم بيع عناصر في الماركت/المتجر أو نقلها؟\n\n` +
+            `• اضغط "OK" لتحديث رصيد الشنطة إلى ${formatNumber(newBag)} دون المساس برصيد ${member.name}.\n` +
+            `• اضغط "Cancel" للإلغاء والتراجع.`
+        );
+
+        if (confirmed) {
+            if (!appState.accountInventory) appState.accountInventory = {};
+            appState.accountInventory[itemId] = newBag;
+            showToast(`📉 تم تحديث رصيد الشنطة إلى ${formatNumber(newBag)} قطعة.`);
+            input.value = '';
+            refreshAllUI();
+            saveStateDebounced();
+        }
+    }
+}
+
+function toggleManualWrap(memberId, itemId) {
+    const wrap = document.getElementById(`manual-wrap-${memberId}-${itemId}`);
+    if (wrap) {
+        wrap.classList.toggle('open');
+    }
+}
+
+// 19. MANUAL CORRECTION / FIX MODAL
+function openItemFixModal(memberId, itemId) {
+    const modal = document.getElementById('fix-modal');
+    if (!modal) return;
+
+    const member = getMember(memberId);
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    if (!itemObj) return;
+
+    document.getElementById('fix-target-member').value = memberId;
+    document.getElementById('fix-target-item').value = itemId;
+
+    const titleEl = document.getElementById('fix-item-title');
+    if (titleEl) titleEl.innerText = `📦 تعديل: ${itemObj.nameKo} (${itemObj.nameAr})`;
+
+    const labelEl = document.getElementById('fix-member-label');
+    if (labelEl) labelEl.innerText = `الكمية المحسوبة لصالح ${member.name}:`;
+
+    const memberQty = appState.members[memberId]?.items[itemId] || 0;
+    const bagQty = getAccountBagQty(itemId);
+
+    document.getElementById('fix-member-qty').value = memberQty;
+    document.getElementById('fix-bag-qty').value = bagQty;
+
+    modal.classList.add('open');
+}
+
+function closeFixModal() {
+    const modal = document.getElementById('fix-modal');
+    if (modal) modal.classList.remove('open');
+}
+
+function saveItemFix() {
+    const memberId = document.getElementById('fix-target-member').value;
+    const itemId = document.getElementById('fix-target-item').value;
+    const memberQty = parseInt(document.getElementById('fix-member-qty').value, 10);
+    const bagQty = parseInt(document.getElementById('fix-bag-qty').value, 10);
+
+    if (isNaN(memberQty) || isNaN(bagQty) || memberQty < 0 || bagQty < 0) {
+        alert("يرجى إدخال أرقام صحيحة موجبة.");
+        return;
+    }
+
+    if (!appState.members[memberId]) appState.members[memberId] = { items: {} };
+    if (!appState.members[memberId].items) appState.members[memberId].items = {};
+    if (!appState.accountInventory) appState.accountInventory = {};
+
+    appState.members[memberId].items[itemId] = memberQty;
+    appState.accountInventory[itemId] = bagQty;
+
+    closeFixModal();
+    refreshAllUI();
+    saveStateDebounced();
+    showToast("💾 تم تصحيح البيانات وحفظها بنجاح!");
+}
+
+// 20. FULL SHIFT MODAL
+function openFullShiftModal(memberId) {
+    const modal = document.getElementById('full-shift-modal');
+    if (!modal) return;
+
+    const member = getMember(memberId);
+    document.getElementById('full-shift-title').innerText = `✨ جرد الشنطة السريع لـ ${member.name}`;
+
+    const listBody = document.getElementById('full-shift-list-body');
+    if (listBody) {
+        listBody.innerHTML = ITEM_CATALOG.map(item => {
+            const prevBag = getAccountBagQty(item.id);
+            return `
+                <div class="full-shift-row">
+                    <div class="full-shift-item-info">
+                        <img src="${item.icon}" alt="">
+                        <div>
+                            <strong>${item.nameKo}</strong>
+                            <div style="font-size: 0.78rem; color: var(--text-muted);">${item.nameAr}</div>
+                        </div>
+                    </div>
+                    <div class="full-shift-inputs">
+                        <span class="full-shift-bag-prev">السابق في الشنطة: <strong>${formatNumber(prevBag)}</strong></span>
+                        <input type="number" min="0" class="full-shift-input" id="bulk-shift-${item.id}" placeholder="${prevBag}" data-item-id="${item.id}" data-prev="${prevBag}">
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modal.dataset.currentMember = memberId;
+    modal.classList.add('open');
+}
+
+function closeFullShiftModal() {
+    const modal = document.getElementById('full-shift-modal');
+    if (modal) modal.classList.remove('open');
+}
+
+function commitFullShift() {
+    const modal = document.getElementById('full-shift-modal');
+    const memberId = modal.dataset.currentMember;
+    if (!memberId) return;
+
+    const inputs = modal.querySelectorAll('.full-shift-input');
+    let totalAdded = 0;
+    let itemsChanged = 0;
+
+    inputs.forEach(input => {
+        const valStr = input.value.trim();
+        if (valStr !== '') {
+            const newBag = parseInt(valStr, 10);
+            const prevBag = parseInt(input.dataset.prev, 10) || 0;
+            const itemId = input.dataset.itemId;
+            const delta = newBag - prevBag;
+
+            if (delta > 0) {
+                if (!appState.members[memberId]) appState.members[memberId] = { items: {} };
+                if (!appState.members[memberId].items) appState.members[memberId].items = {};
+                if (!appState.accountInventory) appState.accountInventory = {};
+
+                appState.members[memberId].items[itemId] = (appState.members[memberId].items[itemId] || 0) + delta;
+                appState.accountInventory[itemId] = newBag;
+                totalAdded += delta;
+                itemsChanged++;
+
+                const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+                if (!appState.shiftLog) appState.shiftLog = [];
+                appState.shiftLog.unshift({
+                    id: 'shift_' + Date.now() + '_' + itemId,
+                    memberId,
+                    memberName: getMember(memberId).name,
+                    avatar: getMember(memberId).avatar,
+                    itemId,
+                    itemNameKo: itemObj ? itemObj.nameKo : itemId,
+                    itemNameAr: itemObj ? itemObj.nameAr : itemId,
+                    prevBag,
+                    newBag,
+                    delta,
+                    time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+                });
+            }
+        }
+    });
+
+    closeFullShiftModal();
+
+    if (itemsChanged > 0) {
+        if (appState.shiftLog.length > 50) appState.shiftLog = appState.shiftLog.slice(0, 50);
+        refreshAllUI();
+        saveStateDebounced();
+        showToast(`🎉 تم تسجيل الجرد واحتساب ${formatNumber(totalAdded)} قطعة جديدة لصالح ${getMember(memberId).name}!`);
+    } else {
+        showToast("لم تقم بإدخال أي زيادة جديدة في الشنطة.");
+    }
+}
+
+// 21. SHIFT HISTORY LOG MODAL
+function openShiftHistoryModal() {
+    const modal = document.getElementById('history-modal');
+    if (!modal) return;
+
+    const listBody = document.getElementById('history-list-body');
+    if (listBody) {
+        const logs = appState.shiftLog || [];
+        if (logs.length === 0) {
+            listBody.innerHTML = `<div style="text-align: center; color: var(--text-dim); padding: 30px;">لا توجد أي عمليات جرد مسجلة حتى الآن.</div>`;
+        } else {
+            listBody.innerHTML = logs.map(log => `
+                <div class="history-item-row">
+                    <div class="history-item-left">
+                        <span style="font-size: 1.4rem;">${log.avatar || '👤'}</span>
+                        <div>
+                            <strong>${log.memberName}:</strong>
+                            <span style="color: #cbd5e1; font-size: 0.88rem;">${log.itemNameKo} (${log.itemNameAr})</span>
+                            <div style="font-size: 0.76rem; color: var(--text-muted);">
+                                كانت في الشنطة: ${formatNumber(log.prevBag)} ➔ أصبحت: ${formatNumber(log.newBag)}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: left;">
+                        <span class="history-badge-delta">+${formatNumber(log.delta)}</span>
+                        <div class="history-time">${log.time || ''}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+
+    modal.classList.add('open');
+}
+
+function closeShiftHistoryModal() {
+    const modal = document.getElementById('history-modal');
+    if (modal) modal.classList.remove('open');
 }
