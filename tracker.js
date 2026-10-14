@@ -61,6 +61,7 @@ let appState = {
         amy: { items: {} },
         abdo: { items: {} }
     },
+    vault: { items: {} },
     accountInventory: {},
     shiftLog: [],
     salesLog: [],
@@ -71,6 +72,9 @@ let appState = {
 };
 
 function getMember(memberId) {
+    if (memberId === 'vault') {
+        return { id: 'vault', name: 'المخزن العام', role: 'رصيد مستقل عام', color: '#eab308', avatar: '🏛️', themeClass: 'theme-vault' };
+    }
     return TEAM_MEMBERS.find(m => m.id === memberId) || { id: memberId, name: memberId, avatar: '👤' };
 }
 
@@ -82,6 +86,7 @@ function getAccountBagQty(itemId) {
     TEAM_MEMBERS.forEach(m => {
         sum += (appState.members[m.id]?.items[itemId] || 0);
     });
+    sum += (appState.vault?.items?.[itemId] || 0);
     return sum;
 }
 
@@ -125,6 +130,7 @@ async function initDatabase() {
     const initial = await window.teamDb.loadInitial();
     if (initial && initial.data) {
         if (initial.data.members) appState.members = initial.data.members;
+        if (initial.data.vault) appState.vault = initial.data.vault;
         if (initial.data.accountInventory) appState.accountInventory = initial.data.accountInventory;
         if (initial.data.shiftLog) appState.shiftLog = initial.data.shiftLog;
         if (initial.data.salesLog) appState.salesLog = initial.data.salesLog;
@@ -134,6 +140,7 @@ async function initDatabase() {
     window.teamDb.onDataChange((incomingData, source) => {
         if (incomingData) {
             if (incomingData.members) appState.members = incomingData.members;
+            if (incomingData.vault) appState.vault = incomingData.vault;
             if (incomingData.accountInventory) appState.accountInventory = incomingData.accountInventory;
             if (incomingData.shiftLog) appState.shiftLog = incomingData.shiftLog;
             if (incomingData.salesLog) appState.salesLog = incomingData.salesLog;
@@ -235,6 +242,72 @@ function renderMemberPanels() {
 
         container.appendChild(panel);
     });
+
+    // 2B. RENDER THE VAULT (المخزن العام المشترك المستقل) PANEL
+    const vaultPanel = document.createElement('div');
+    vaultPanel.className = `member-profile-panel theme-vault ${appState.activeTab === 'vault' ? 'active' : ''}`;
+    vaultPanel.id = 'panel-vault';
+
+    vaultPanel.innerHTML = `
+        <!-- VAULT HEADER -->
+        <div class="member-card-header">
+            <div class="member-info-left">
+                <div class="member-avatar-lg">🏛️</div>
+                <div class="member-name-box">
+                    <h3>المخزن العام المشترك</h3>
+                    <span class="member-role-badge" style="background: rgba(234, 179, 8, 0.18); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4);">
+                        📦 رصيد مستقل عام (لا يتبع لأي عضو)
+                    </span>
+                </div>
+            </div>
+
+            <div class="member-stats-strip">
+                <div class="member-stat-strip-item">
+                    <span class="member-stat-strip-label">📦 إجمالي قطع المخزن:</span>
+                    <span class="member-stat-strip-val val-items" id="member-items-vault" style="color: #facc15;">0 قطعة</span>
+                </div>
+                <div class="member-stat-strip-item">
+                    <span class="member-stat-strip-label">💰 رصيد كاش مبيعات المخزن:</span>
+                    <span class="member-stat-strip-val val-meso" id="member-meso-vault" style="color: var(--accent-gold);">0 ميسو</span>
+                </div>
+            </div>
+
+            <div class="member-actions">
+                <button class="btn-member-action" style="background: linear-gradient(135deg, #eab308, #ca8a04); color: #000; font-weight: 900; border: none;" onclick="openVaultBulkAddModal()" title="إضافة سريعة أو توريد عناصر للمخزن">
+                    📥 توريد عناصر
+                </button>
+                <button class="btn-member-action reset" onclick="confirmResetVault()" title="تصفير محتويات المخزن العام">
+                    🗑️ تصفير
+                </button>
+                <button class="btn-member-action" onclick="copyVaultReport()" title="نسخ تقرير المخزن العام">
+                    📋 تقرير
+                </button>
+            </div>
+        </div>
+
+        <!-- CONTROLS & FILTERS -->
+        <div class="tracker-controls-bar">
+            <div class="search-wrapper">
+                <input type="text" class="tracker-search-input" placeholder="🔍 ابحث في عناصر المخزن العام (شمس، جارنت، كريستال...)" oninput="handleSearch(this.value, 'vault')">
+            </div>
+
+            <div class="category-filter-chips">
+                <button class="filter-chip active" onclick="setCategoryFilter('all', 'vault', this)">الكل</button>
+                <button class="filter-chip" onclick="setCategoryFilter('pixie', 'vault', this)">قطع لاستر ☀️</button>
+                <button class="filter-chip" onclick="setCategoryFilter('ores', 'vault', this)">خامات وجواهر 💎</button>
+                <button class="filter-chip" onclick="setCategoryFilter('scrolls', 'vault', this)">لفائف نادرة 📜</button>
+                <button class="filter-chip" onclick="setCategoryFilter('etc', 'vault', this)">دروبات متنوعة 🎒</button>
+                <button class="filter-chip" onclick="setCategoryFilter('gear', 'vault', this)">معدات 🛡️</button>
+            </div>
+        </div>
+
+        <!-- ITEMS GRID -->
+        <div class="items-grid" id="grid-vault">
+            ${renderVaultItemCards()}
+        </div>
+    `;
+
+    container.appendChild(vaultPanel);
 }
 
 function renderItemCards(memberId) {
@@ -331,6 +404,237 @@ function renderItemCards(memberId) {
     }).join('');
 }
 
+function renderVaultItemCards() {
+    const vaultItems = appState.vault?.items || {};
+    const query = (appState.searchQuery || '').toLowerCase().trim();
+    const cat = appState.activeCategory || 'all';
+
+    return ITEM_CATALOG.map(item => {
+        // Filter by category
+        if (cat !== 'all' && item.cat !== cat) return '';
+
+        // Filter by search
+        if (query) {
+            const matchKo = item.nameKo.toLowerCase().includes(query);
+            const matchAr = item.nameAr.toLowerCase().includes(query);
+            if (!matchKo && !matchAr) return '';
+        }
+
+        const vaultQty = vaultItems[item.id] || 0;
+        const bagQty = getAccountBagQty(item.id);
+        const hasQty = vaultQty > 0;
+
+        return `
+            <div class="tracker-item-card ${hasQty ? 'has-qty' : ''}" id="card-vault-${item.id}" style="${hasQty ? 'border-color: rgba(234, 179, 8, 0.6);' : ''}">
+                <div class="item-card-top">
+                    <div class="item-thumb-box">
+                        <img src="${item.icon}" alt="${item.nameKo}" loading="lazy">
+                    </div>
+                    <div class="item-card-titles">
+                        <span class="item-korean-name">${item.nameKo}</span>
+                        <span class="item-arabic-name">${item.nameAr}</span>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+                            <span class="item-price-chip ${item.priceType}">
+                                🏷️ ${item.badge}
+                            </span>
+                            <span class="account-bag-badge" title="رصيد شنطة اللعبة الإجمالية الآن">
+                                🎒 إجمالي الشنطة: <strong>${formatNumber(bagQty)}</strong>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vault Stock Box -->
+                <div style="background: rgba(15, 23, 42, 0.7); border: 1.5px solid rgba(234, 179, 8, 0.35); border-radius: 12px; padding: 10px 14px; margin: 12px 0 10px; display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 0.86rem; color: #cbd5e1; font-weight: 700;">🏛️ الرصيد في المخزن:</span>
+                    <strong id="vault-qty-val-${item.id}" style="font-size: 1.25rem; color: #facc15; font-weight: 900;">
+                        ${formatNumber(vaultQty)} ${item.id === 'raw_meso' ? 'ميسو كاش' : 'قطعة'}
+                    </strong>
+                </div>
+
+                <!-- Stepper & Direct Input -->
+                <div class="manual-stepper-wrap open" style="margin-top: 6px;">
+                    <div class="stepper-row">
+                        <button class="btn-stepper" onclick="modifyVaultQty('${item.id}', -1)" title="طرح 1">−</button>
+                        <input type="number" min="0" class="stepper-input" id="input-vault-${item.id}" value="${vaultQty}" onchange="setDirectVaultQty('${item.id}', this.value)" oninput="setDirectVaultQty('${item.id}', this.value)" placeholder="العدد...">
+                        <button class="btn-stepper" onclick="modifyVaultQty('${item.id}', 1)" title="إضافة 1">+</button>
+                    </div>
+                    <div class="quick-add-row" style="margin-top: 6px;">
+                        <button class="btn-quick-add" onclick="modifyVaultQty('${item.id}', 10)">+10</button>
+                        <button class="btn-quick-add" onclick="modifyVaultQty('${item.id}', 50)">+50</button>
+                        <button class="btn-quick-add" onclick="modifyVaultQty('${item.id}', 100)">+100</button>
+                        <button class="btn-quick-add" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3);" onclick="modifyVaultQty('${item.id}', -10)">-10</button>
+                        <button class="btn-quick-add" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3);" onclick="modifyVaultQty('${item.id}', -50)">-50</button>
+                    </div>
+                </div>
+
+                <!-- Card Actions Row -->
+                <div class="card-actions-row" style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    ${item.id !== 'raw_meso' ? `
+                        <button class="btn-card-sell" style="background: linear-gradient(135deg, #eab308, #ca8a04); color: #000; font-weight: 900; border: none; padding: 6px 14px; border-radius: 8px;" onclick="openVaultSellModal('${item.id}')" title="بيع وتصفير هذا العنصر من المخزن وتحديد السعر">
+                            💰 بيع من المخزن
+                        </button>
+                    ` : '<span style="color: var(--accent-gold); font-size: 0.85rem; font-weight: 800;">كاش ميسو مباشر</span>'}
+                    <button class="btn-card-fix" onclick="setDirectVaultQty('${item.id}', 0)" title="تصفير هذا العنصر في المخزن فقط">
+                        🗑️ تصفير
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function modifyVaultQty(itemId, delta) {
+    if (!appState.vault) appState.vault = { items: {} };
+    if (!appState.vault.items) appState.vault.items = {};
+
+    let current = appState.vault.items[itemId] || 0;
+    current = Math.max(0, current + delta);
+
+    if (current === 0) {
+        delete appState.vault.items[itemId];
+    } else {
+        appState.vault.items[itemId] = current;
+    }
+
+    updateSingleVaultItemUI(itemId, current);
+    updateCalculations();
+    saveStateDebounced();
+}
+
+function setDirectVaultQty(itemId, value) {
+    if (!appState.vault) appState.vault = { items: {} };
+    if (!appState.vault.items) appState.vault.items = {};
+
+    let num = parseInt(value, 10);
+    if (isNaN(num) || num <= 0) {
+        num = 0;
+        delete appState.vault.items[itemId];
+    } else {
+        appState.vault.items[itemId] = num;
+    }
+
+    updateSingleVaultItemUI(itemId, num);
+    updateCalculations();
+    saveStateDebounced();
+}
+
+function updateSingleVaultItemUI(itemId, qty) {
+    const input = document.getElementById(`input-vault-${itemId}`);
+    if (input && document.activeElement !== input) {
+        input.value = qty;
+    }
+
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    const qtyVal = document.getElementById(`vault-qty-val-${itemId}`);
+    if (qtyVal) {
+        qtyVal.innerText = `${formatNumber(qty)} ${itemObj?.id === 'raw_meso' ? 'ميسو كاش' : 'قطعة'}`;
+    }
+
+    const card = document.getElementById(`card-vault-${itemId}`);
+    if (card) {
+        if (qty > 0) {
+            card.classList.add('has-qty');
+            card.style.borderColor = 'rgba(234, 179, 8, 0.6)';
+        } else {
+            card.classList.remove('has-qty');
+            card.style.borderColor = '';
+        }
+    }
+}
+
+function confirmResetVault() {
+    if (!confirm("⚠️ هل أنت متأكد من تصفير كافة محتويات المخزن العام المشترك؟\n(لن تتأثر دروبات محمد أو طنط ايمي أو عبدالرحمن)")) return;
+    if (appState.vault) {
+        appState.vault.items = {};
+    }
+    refreshAllUI();
+    saveStateDebounced();
+    showToast("🗑️ تم تصفير محتويات المخزن العام بنجاح!");
+}
+
+function copyVaultReport() {
+    const vaultItems = appState.vault?.items || {};
+    let totalCash = vaultItems['raw_meso'] || 0;
+    let totalQty = 0;
+    let lines = [`🏛️ تقرير المخزن العام المشترك - MapleLand`];
+    lines.push(`📅 التاريخ: ${new Date().toLocaleDateString('ar-EG')}`);
+    lines.push(`---------------------------------`);
+
+    ITEM_CATALOG.forEach(item => {
+        const qty = vaultItems[item.id] || 0;
+        if (qty > 0 && item.id !== 'raw_meso') {
+            totalQty += qty;
+            lines.push(`▫️ ${item.nameKo} (${item.nameAr}): ${formatNumber(qty)} قطعة`);
+        }
+    });
+
+    lines.push(`---------------------------------`);
+    lines.push(`📦 إجمالي القطع في المخزن العام: ${formatNumber(totalQty)} قطعة`);
+    lines.push(`💰 رصيد كاش المخزن العام: ${formatNumber(totalCash)} ميسو`);
+    lines.push(`---------------------------------`);
+    lines.push(`✨ MapleLand General Vault`);
+
+    const text = lines.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        showToast("📋 تم نسخ تقرير المخزن العام للحافظة بنجاح!");
+    });
+}
+
+function openVaultBulkAddModal() {
+    const modal = document.getElementById('vault-bulk-modal');
+    if (!modal) return;
+
+    const select = document.getElementById('vault-bulk-item-select');
+    if (select) {
+        select.innerHTML = ITEM_CATALOG.map(item => {
+            const cur = appState.vault?.items?.[item.id] || 0;
+            return `<option value="${item.id}">${item.nameKo} (${item.nameAr}) - متوفر حالياً: ${formatNumber(cur)}</option>`;
+        }).join('');
+    }
+
+    const input = document.getElementById('vault-bulk-input-qty');
+    if (input) input.value = '';
+
+    modal.classList.add('open');
+}
+
+function closeVaultBulkModal() {
+    const modal = document.getElementById('vault-bulk-modal');
+    if (!modal) return;
+    modal.classList.remove('open');
+}
+
+function setVaultBulkQty(val) {
+    const input = document.getElementById('vault-bulk-input-qty');
+    if (input) {
+        let cur = parseInt(input.value, 10) || 0;
+        input.value = cur + val;
+    }
+}
+
+function confirmVaultBulkAdd() {
+    const select = document.getElementById('vault-bulk-item-select');
+    const input = document.getElementById('vault-bulk-input-qty');
+    if (!select || !input) return;
+
+    const itemId = select.value;
+    const qty = parseInt(input.value, 10);
+    if (isNaN(qty) || qty <= 0) {
+        alert("يرجى إدخال كمية صحيحة أكبر من 0.");
+        return;
+    }
+
+    modifyVaultQty(itemId, qty);
+    closeVaultBulkModal();
+    const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
+    showToast(`📥 تم توريد +${formatNumber(qty)} من (${itemObj?.nameKo || itemId}) للمخزن العام بنجاح!`);
+}
+
+function openVaultSellModal(itemId) {
+    openMemberSellModal('vault', itemId);
+}
+
 // 7. RENDER ALL MEMBERS SIDE-BY-SIDE VIEW
 function renderAllMembersView() {
     const container = document.getElementById('panel-all');
@@ -355,6 +659,23 @@ function renderAllMembersView() {
                     </div>
                 </div>
             `).join('')}
+
+            <!-- 4. General Vault Column in Side-by-Side View -->
+            <div class="member-column-card theme-vault">
+                <div class="column-card-header">
+                    <div class="column-member-title">
+                        <span>🏛️</span>
+                        <span>المخزن (عام مستقل)</span>
+                    </div>
+                    <span class="column-total-badge" id="column-total-vault" style="background: rgba(234, 179, 8, 0.2); color: #facc15; border-color: #eab308;">
+                        0 ميسو
+                    </span>
+                </div>
+
+                <div class="column-items-list" id="column-list-vault">
+                    <!-- Populated dynamically in updateCalculations() -->
+                </div>
+            </div>
         </div>
     `;
 }
@@ -481,6 +802,37 @@ function updateCalculations() {
         if (colTotalEl) colTotalEl.innerText = `${formatMesoCompact(memberMeso)} كاش`;
     });
 
+    // Calculate Vault (المخزن العام المشترك المستقل) totals
+    const vaultItems = appState.vault?.items || {};
+    let vaultMeso = vaultItems['raw_meso'] || 0;
+    let vaultItemsCount = 0;
+
+    ITEM_CATALOG.forEach(item => {
+        const qty = vaultItems[item.id] || 0;
+        if (qty > 0) {
+            if (item.id === 'raw_meso') {
+                // already accounted in vaultMeso
+            } else {
+                vaultItemsCount += qty;
+                itemAggregates[item.id].totalQty += qty;
+            }
+            itemAggregates[item.id].vaultQty = qty;
+        }
+    });
+
+    grandTotalMeso += vaultMeso;
+    grandTotalItems += vaultItemsCount;
+
+    // Update strip inside Vault header
+    const vaultItemsEl = document.getElementById('member-items-vault');
+    const vaultMesoEl = document.getElementById('member-meso-vault');
+    if (vaultItemsEl) vaultItemsEl.innerText = `${formatNumber(vaultItemsCount)} قطعة`;
+    if (vaultMesoEl) vaultMesoEl.innerText = `${formatMesoCompact(vaultMeso)} كاش`;
+
+    // Update Vault column card total in side-by-side view
+    const colTotalVaultEl = document.getElementById('column-total-vault');
+    if (colTotalVaultEl) colTotalVaultEl.innerText = `${formatMesoCompact(vaultMeso)} كاش`;
+
     // 1. UPDATE MASTER GRAND TOTAL CARD
     const masterMesoEl = document.getElementById('master-total-meso');
     const masterItemsEl = document.getElementById('master-total-items');
@@ -560,7 +912,7 @@ function updateMasterTable(aggregates, totalMeso) {
 
     if (itemsList.length === 0) {
         const msg = warehouseOnlyAvailable 
-            ? "المخزن الكلي فارغ حالياً. بمجرد إضافة أي دروب في بروفايل أي عضو سيظهر هنا فوراً مع زر البيع والتصفير!" 
+            ? "المخزن الكلي فارغ حالياً. بمجرد إضافة أي دروب في بروفايل أي عضو أو في المخزن العام سيظهر هنا فوراً مع زر البيع والتصفير!" 
             : "لا توجد نتائج مطابقة لبحثك في المخزن الكلي.";
         tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">${msg}</td></tr>`;
         return;
@@ -573,6 +925,7 @@ function updateMasterTable(aggregates, totalMeso) {
         const mohamedQty = item.byMember['mohamed'] || 0;
         const amyQty = item.byMember['amy'] || 0;
         const abdoQty = item.byMember['abdo'] || 0;
+        const vaultQty = item.vaultQty || 0;
 
         return `
             <tr>
@@ -593,6 +946,7 @@ function updateMasterTable(aggregates, totalMeso) {
                         <span style="color: #38bdf8; font-weight: 800;">محمد: ${mohamedQty}</span> | 
                         <span style="color: #ec4899; font-weight: 800;">طنط ايمي: ${amyQty}</span> | 
                         <span style="color: #f97316; font-weight: 800;">عبدالرحمن: ${abdoQty}</span>
+                        ${vaultQty > 0 ? ` | <span style="color: #facc15; font-weight: 800;">🏛️ المخزن: ${vaultQty}</span>` : ''}
                     </div>
                 </td>
                 <td style="text-align: center;">
@@ -637,6 +991,35 @@ function updateColumnLists() {
             `;
         }).join('');
     });
+
+    // Populate Vault column in side-by-side view
+    const vaultListEl = document.getElementById('column-list-vault');
+    if (vaultListEl) {
+        const vaultItems = appState.vault?.items || {};
+        const activeVaultItems = ITEM_CATALOG.filter(i => (vaultItems[i.id] || 0) > 0);
+
+        if (activeVaultItems.length === 0) {
+            vaultListEl.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.85rem;">المخزن العام فارغ حالياً</div>`;
+        } else {
+            vaultListEl.innerHTML = activeVaultItems.map(item => {
+                const qty = vaultItems[item.id] || 0;
+                return `
+                    <div class="column-item-row">
+                        <div class="column-item-info">
+                            <img src="${item.icon}" alt="" style="width: 22px; height: 22px; object-fit: contain;">
+                            <span>${item.nameKo}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="number" class="column-item-qty-input" value="${qty}" onchange="setDirectVaultQty('${item.id}', this.value)">
+                            <span style="font-size: 0.8rem; color: #facc15; font-weight: 800; min-width: 60px; text-align: left;">
+                                ${item.id === 'raw_meso' ? `${formatNumber(qty)} كاش` : `${formatNumber(qty)} قطعة`}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
 }
 
 // 10. REFRESH ALL UI
@@ -647,6 +1030,12 @@ function refreshAllUI() {
             grid.innerHTML = renderItemCards(member.id);
         }
     });
+
+    const vaultGrid = document.getElementById('grid-vault');
+    if (vaultGrid) {
+        vaultGrid.innerHTML = renderVaultItemCards();
+    }
+
     updateCalculations();
 }
 
@@ -697,7 +1086,11 @@ function handleSearch(query, memberId) {
     appState.searchQuery = query;
     const grid = document.getElementById(`grid-${memberId}`);
     if (grid) {
-        grid.innerHTML = renderItemCards(memberId);
+        if (memberId === 'vault') {
+            grid.innerHTML = renderVaultItemCards();
+        } else {
+            grid.innerHTML = renderItemCards(memberId);
+        }
     }
 }
 
@@ -713,7 +1106,11 @@ function setCategoryFilter(cat, memberId, btn) {
 
     const grid = document.getElementById(`grid-${memberId}`);
     if (grid) {
-        grid.innerHTML = renderItemCards(memberId);
+        if (memberId === 'vault') {
+            grid.innerHTML = renderVaultItemCards();
+        } else {
+            grid.innerHTML = renderItemCards(memberId);
+        }
     }
 }
 
@@ -888,8 +1285,9 @@ function importBackupJSON(fileInput) {
     reader.onload = (e) => {
         try {
             const imported = JSON.parse(e.target.result);
-            if (imported && imported.members) {
-                appState.members = imported.members;
+            if (imported && (imported.members || imported.vault)) {
+                if (imported.members) appState.members = imported.members;
+                if (imported.vault) appState.vault = imported.vault;
                 refreshAllUI();
                 saveStateDebounced();
                 showToast("📤 تم استيراد البيانات وتطبيقها بنجاح!");
@@ -926,6 +1324,8 @@ function setupEventListeners() {
             closeFullShiftModal();
             closeShiftHistoryModal();
             closeSellModal();
+            closeMemberSellModal();
+            closeVaultBulkModal();
             closeSalesHistoryModal();
         }
     });
@@ -1242,13 +1642,14 @@ function openUniversalSellModal(defaultItemId) {
     const modal = document.getElementById('sell-modal');
     if (!modal) return;
 
-    // Get list of all items that exist in warehouse
+    // Get list of all items that exist in warehouse (members + vault)
     const availableItems = ITEM_CATALOG.filter(item => {
         if (item.id === 'raw_meso') return false;
         let total = 0;
         TEAM_MEMBERS.forEach(m => {
             total += (appState.members[m.id]?.items?.[item.id] || 0);
         });
+        total += (appState.vault?.items?.[item.id] || 0);
         return total > 0;
     });
 
@@ -1266,6 +1667,7 @@ function openUniversalSellModal(defaultItemId) {
             TEAM_MEMBERS.forEach(m => {
                 total += (appState.members[m.id]?.items?.[item.id] || 0);
             });
+            total += (appState.vault?.items?.[item.id] || 0);
             return `<option value="${item.id}">${item.nameKo} (${item.nameAr}) - متوفر: ${formatNumber(total)} قطعة</option>`;
         }).join('');
     }
@@ -1308,6 +1710,7 @@ function openSellModal(itemId) {
     TEAM_MEMBERS.forEach(m => {
         totalContributed += ((appState.members[m.id]?.items && appState.members[m.id].items[itemId]) || 0);
     });
+    totalContributed += (appState.vault?.items?.[itemId] || 0);
 
     const availEl = document.getElementById('sell-available-qty');
     if (availEl) availEl.innerText = formatNumber(totalContributed);
@@ -1358,33 +1761,42 @@ function onSellInputsChange(changedField) {
         }
     }
 
-    // Calculate members breakdown
+    // Calculate members breakdown (including Vault if it has stock)
     const payoutList = document.getElementById('sell-payout-list');
     if (!payoutList) return;
 
     let totalContributed = 0;
     const contributions = {};
+    const entities = [...TEAM_MEMBERS];
+
     TEAM_MEMBERS.forEach(m => {
         const q = (appState.members[m.id]?.items && appState.members[m.id].items[itemId]) || 0;
         contributions[m.id] = q;
         totalContributed += q;
     });
 
+    const vaultQ = (appState.vault?.items && appState.vault.items[itemId]) || 0;
+    if (vaultQ > 0) {
+        entities.push({ id: 'vault', name: 'المخزن العام (مستقل)', avatar: '🏛️' });
+        contributions['vault'] = vaultQ;
+        totalContributed += vaultQ;
+    }
+
     if (totalContributed === 0) {
-        payoutList.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; padding: 10px; text-align: center;">لا يملك أي عضو في الفريق حالياً كميات مسجلة من هذا العنصر.</div>`;
+        payoutList.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; padding: 10px; text-align: center;">لا يملك أي عضو أو المخزن العام حالياً كميات مسجلة من هذا العنصر.</div>`;
         return;
     }
 
     if (total <= 0) {
         payoutList.innerHTML = `
             <div style="color: #fbbf24; background: rgba(245, 158, 11, 0.12); border: 1px dashed rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 12px; text-align: center; font-size: 0.88rem; font-weight: 700;">
-                ⚠️ اكتب سعر البيع الفعلي أعلاه (سعر القطعة أو إجمالي المبلغ) لحساب وتوزيع الميسو كاش على الفريق!
+                ⚠️ اكتب سعر البيع الفعلي أعلاه (سعر القطعة أو إجمالي المبلغ) لحساب وتوزيع الميسو كاش على الفريق والمخزن!
             </div>
         `;
         return;
     }
 
-    payoutList.innerHTML = TEAM_MEMBERS.map(m => {
+    payoutList.innerHTML = entities.map(m => {
         const memberFarmed = contributions[m.id] || 0;
         const ratio = totalContributed > 0 ? (memberFarmed / totalContributed) : 0;
         const pct = (ratio * 100).toFixed(1);
@@ -1404,7 +1816,7 @@ function onSellInputsChange(changedField) {
                     <div>
                         <strong>${m.name}</strong>
                         <div style="font-size: 0.75rem; color: var(--text-muted);">
-                            جمع ${formatNumber(memberFarmed)} قطعة (${pct}%)
+                            ${m.id === 'vault' ? 'متوفر بالمخزن' : 'جمع'} ${formatNumber(memberFarmed)} قطعة (${pct}%)
                         </div>
                     </div>
                 </div>
@@ -1442,28 +1854,37 @@ function confirmExecuteSale() {
 
     let totalContributed = 0;
     const contributions = {};
+    const entities = [...TEAM_MEMBERS];
+
     TEAM_MEMBERS.forEach(m => {
         const q = (appState.members[m.id]?.items && appState.members[m.id].items[itemId]) || 0;
         contributions[m.id] = q;
         totalContributed += q;
     });
 
+    const vaultQ = (appState.vault?.items && appState.vault.items[itemId]) || 0;
+    if (vaultQ > 0) {
+        entities.push({ id: 'vault', name: 'المخزن العام', avatar: '🏛️' });
+        contributions['vault'] = vaultQ;
+        totalContributed += vaultQ;
+    }
+
     if (totalContributed === 0) {
-        alert("لا يملك أي عضو في الفريق حالياً كميات مسجلة من هذا العنصر لبيعها.");
+        alert("لا يملك أي عضو أو المخزن العام حالياً كميات مسجلة من هذا العنصر لبيعها.");
         return;
     }
 
     const confirmMsg = 
         `هل أنت متأكد من تنفيذ عملية بيع ${formatNumber(soldQty)} قطعة من (${itemObj.nameKo})؟\n\n` +
-        `• إجمالي المبلغ المحصل: ${formatNumber(totalRevenue)} ميسو\n` +
-        `• سيتم خصم القطع المباعة فوراً من الشنطة ومن حساب كل عضو.\n` +
-        `• سيتم إضافة الميسو كاش نقد مباشر في حساب كل عضو حسب نسبة مساهمته!`;
+        `• إجمالي المبلغ المحصل: ${formatNumber(totalRevenue)} ميسو كاش\n` +
+        `• سيتم خصم القطع المباعة فوراً من الشنطة ومن حساب كل جهة.\n` +
+        `• سيتم إضافة الميسو كاش نقد مباشر في حساب كل عضو والمخزن حسب نسبة المساهمة!`;
 
     if (!confirm(confirmMsg)) return;
 
     const payouts = [];
 
-    TEAM_MEMBERS.forEach(m => {
+    entities.forEach(m => {
         const memberFarmed = contributions[m.id] || 0;
         const ratio = totalContributed > 0 ? (memberFarmed / totalContributed) : 0;
 
@@ -1475,21 +1896,37 @@ function confirmExecuteSale() {
         }
         const memberMesoShare = Math.round(ratio * totalRevenue);
 
-        if (!appState.members[m.id]) appState.members[m.id] = { items: {} };
-        if (!appState.members[m.id].items) appState.members[m.id].items = {};
+        if (m.id === 'vault') {
+            if (!appState.vault) appState.vault = { items: {} };
+            if (!appState.vault.items) appState.vault.items = {};
 
-        // Deduct sold items
-        const curItems = appState.members[m.id].items[itemId] || 0;
-        const newItems = Math.max(0, curItems - memberSoldShare);
-        if (newItems === 0) {
-            delete appState.members[m.id].items[itemId];
+            const curItems = appState.vault.items[itemId] || 0;
+            const newItems = Math.max(0, curItems - memberSoldShare);
+            if (newItems === 0) {
+                delete appState.vault.items[itemId];
+            } else {
+                appState.vault.items[itemId] = newItems;
+            }
+
+            const curMeso = appState.vault.items['raw_meso'] || 0;
+            appState.vault.items['raw_meso'] = curMeso + memberMesoShare;
         } else {
-            appState.members[m.id].items[itemId] = newItems;
-        }
+            if (!appState.members[m.id]) appState.members[m.id] = { items: {} };
+            if (!appState.members[m.id].items) appState.members[m.id].items = {};
 
-        // Add cash Meso to member's account!
-        const curMeso = appState.members[m.id].items['raw_meso'] || 0;
-        appState.members[m.id].items['raw_meso'] = curMeso + memberMesoShare;
+            // Deduct sold items
+            const curItems = appState.members[m.id].items[itemId] || 0;
+            const newItems = Math.max(0, curItems - memberSoldShare);
+            if (newItems === 0) {
+                delete appState.members[m.id].items[itemId];
+            } else {
+                appState.members[m.id].items[itemId] = newItems;
+            }
+
+            // Add cash Meso to member's account!
+            const curMeso = appState.members[m.id].items['raw_meso'] || 0;
+            appState.members[m.id].items['raw_meso'] = curMeso + memberMesoShare;
+        }
 
         payouts.push({
             memberId: m.id,
@@ -1526,7 +1963,7 @@ function confirmExecuteSale() {
     refreshAllUI();
     saveStateDebounced();
 
-    showToast(`🎉 تم بيع ${formatNumber(soldQty)} قطعة بنجاح وإضافة ${formatNumber(totalRevenue)} ميسو كاش لحسابات الفريق!`, "cloud");
+    showToast(`🎉 تم بيع ${formatNumber(soldQty)} قطعة بنجاح وإضافة ${formatNumber(totalRevenue)} ميسو كاش لحسابات الفريق والمخزن!`, "cloud");
 }
 
 // ========================================================
@@ -1542,9 +1979,12 @@ function openMemberSellModal(memberId, itemId) {
     const itemObj = ITEM_CATALOG.find(i => i.id === itemId);
     if (!member || !itemObj) return;
 
-    const curMemberQty = (appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0;
+    const curMemberQty = memberId === 'vault'
+        ? ((appState.vault?.items && appState.vault.items[itemId]) || 0)
+        : ((appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0);
+
     if (curMemberQty <= 0) {
-        alert(`لا يملك ${member.name} أي قطع مسجلة من (${itemObj.nameKo}) لبيعها.`);
+        alert(memberId === 'vault' ? `لا توجد أي قطع مسجلة من (${itemObj.nameKo}) في المخزن العام لبيعها.` : `لا يملك ${member.name} أي قطع مسجلة من (${itemObj.nameKo}) لبيعها.`);
         return;
     }
 
@@ -1552,10 +1992,12 @@ function openMemberSellModal(memberId, itemId) {
     document.getElementById('member-sell-target-member').value = memberId;
     document.getElementById('member-sell-target-item').value = itemId;
 
-    document.getElementById('member-sell-modal-title').innerText = `💰 بيع عنصر لحساب ${member.name} فقط`;
+    document.getElementById('member-sell-modal-title').innerText = memberId === 'vault'
+        ? `💰 بيع عنصر من المخزن العام المشترك`
+        : `💰 بيع عنصر لحساب ${member.name} فقط`;
     const ownerBadge = document.getElementById('member-sell-owner-badge');
     if (ownerBadge) {
-        ownerBadge.innerText = `👤 حساب: ${member.name}`;
+        ownerBadge.innerText = memberId === 'vault' ? `🏛️ المخزن: رصيد عام مستقل` : `👤 حساب: ${member.name}`;
     }
 
     const iconEl = document.getElementById('member-sell-item-icon');
@@ -1589,7 +2031,9 @@ function closeMemberSellModal() {
 function setMemberSellAllQty() {
     const { memberId, itemId } = currentMemberSellTarget;
     if (!memberId || !itemId) return;
-    const curMemberQty = (appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0;
+    const curMemberQty = memberId === 'vault'
+        ? ((appState.vault?.items && appState.vault.items[itemId]) || 0)
+        : ((appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0);
     document.getElementById('member-sell-input-qty').value = curMemberQty;
     onMemberSellInputsChange('qty');
 }
@@ -1650,7 +2094,9 @@ function confirmExecuteMemberSale() {
     const totalRevenue = parseInt(document.getElementById('member-sell-input-total-price').value, 10);
     const unitPrice = parseInt(document.getElementById('member-sell-input-unit-price').value, 10) || (soldQty > 0 ? Math.round(totalRevenue / soldQty) : 0);
 
-    const curMemberQty = (appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0;
+    const curMemberQty = memberId === 'vault'
+        ? ((appState.vault?.items && appState.vault.items[itemId]) || 0)
+        : ((appState.members[memberId]?.items && appState.members[memberId].items[itemId]) || 0);
 
     if (isNaN(soldQty) || soldQty <= 0) {
         alert("يرجى إدخال كمية بيع صحيحة أكبر من 0.");
@@ -1667,27 +2113,45 @@ function confirmExecuteMemberSale() {
         return;
     }
 
-    const confirmMsg = 
-        `هل أنت متأكد من بيع ${formatNumber(soldQty)} قطعة من (${itemObj.nameKo}) لحساب ${member.name} فقط؟\n\n` +
-        `• سيتم إضافة: +${formatNumber(totalRevenue)} ميسو كاش نقد حقيقي في رصيد ${member.name}.\n` +
-        `• سيتم تصفير/خصم: -${formatNumber(soldQty)} قطعة من دروبات ${member.name} ومن الشنطة والمخزن الكلي.`;
+    const confirmMsg = memberId === 'vault'
+        ? `هل أنت متأكد من بيع ${formatNumber(soldQty)} قطعة من (${itemObj.nameKo}) من المخزن العام المشترك؟\n\n` +
+          `• سيتم إضافة: +${formatNumber(totalRevenue)} ميسو كاش نقد حقيقي في رصيد كاش المخزن العام.\n` +
+          `• سيتم تصفير/خصم: -${formatNumber(soldQty)} قطعة من المخزن العام ومن الشنطة والمخزن الكلي.`
+        : `هل أنت متأكد من بيع ${formatNumber(soldQty)} قطعة من (${itemObj.nameKo}) لحساب ${member.name} فقط؟\n\n` +
+          `• سيتم إضافة: +${formatNumber(totalRevenue)} ميسو كاش نقد حقيقي في رصيد ${member.name}.\n` +
+          `• سيتم تصفير/خصم: -${formatNumber(soldQty)} قطعة من دروبات ${member.name} ومن الشنطة والمخزن الكلي.`;
 
     if (!confirm(confirmMsg)) return;
 
-    if (!appState.members[memberId]) appState.members[memberId] = { items: {} };
-    if (!appState.members[memberId].items) appState.members[memberId].items = {};
+    if (memberId === 'vault') {
+        if (!appState.vault) appState.vault = { items: {} };
+        if (!appState.vault.items) appState.vault.items = {};
 
-    // 1. Deduct items from member
-    const newItems = Math.max(0, curMemberQty - soldQty);
-    if (newItems === 0) {
-        delete appState.members[memberId].items[itemId];
+        const newItems = Math.max(0, curMemberQty - soldQty);
+        if (newItems === 0) {
+            delete appState.vault.items[itemId];
+        } else {
+            appState.vault.items[itemId] = newItems;
+        }
+
+        const curMeso = appState.vault.items['raw_meso'] || 0;
+        appState.vault.items['raw_meso'] = curMeso + totalRevenue;
     } else {
-        appState.members[memberId].items[itemId] = newItems;
-    }
+        if (!appState.members[memberId]) appState.members[memberId] = { items: {} };
+        if (!appState.members[memberId].items) appState.members[memberId].items = {};
 
-    // 2. Add cash Meso to member's account!
-    const curMeso = appState.members[memberId].items['raw_meso'] || 0;
-    appState.members[memberId].items['raw_meso'] = curMeso + totalRevenue;
+        // 1. Deduct items from member
+        const newItems = Math.max(0, curMemberQty - soldQty);
+        if (newItems === 0) {
+            delete appState.members[memberId].items[itemId];
+        } else {
+            appState.members[memberId].items[itemId] = newItems;
+        }
+
+        // 2. Add cash Meso to member's account!
+        const curMeso = appState.members[memberId].items['raw_meso'] || 0;
+        appState.members[memberId].items['raw_meso'] = curMeso + totalRevenue;
+    }
 
     // 3. Deduct from account bag
     const curBag = getAccountBagQty(itemId);

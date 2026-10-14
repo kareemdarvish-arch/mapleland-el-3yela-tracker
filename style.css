@@ -555,6 +555,13 @@ body {
     box-shadow: 0 0 20px rgba(168, 85, 247, 0.35);
 }
 
+.profile-tab-btn.active.tab-vault {
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(15, 23, 42, 0.9));
+    border-color: #eab308;
+    color: #facc15;
+    box-shadow: 0 0 20px rgba(234, 179, 8, 0.35);
+}
+
 /* 3. MEMBER PROFILE CONTAINER */
 .member-profile-panel {
     display: none;
@@ -587,6 +594,7 @@ body {
 .member-profile-panel.theme-mohamed .member-card-header { border-right: 5px solid #38bdf8; }
 .member-profile-panel.theme-amy .member-card-header { border-right: 5px solid #ec4899; }
 .member-profile-panel.theme-abdo .member-card-header { border-right: 5px solid #f97316; }
+.member-profile-panel.theme-vault .member-card-header { border-right: 5px solid #eab308; }
 
 .member-info-left {
     display: flex;
@@ -608,6 +616,7 @@ body {
 .theme-mohamed .member-avatar-lg { background: linear-gradient(135deg, #0284c7, #0369a1); border: 2px solid #38bdf8; }
 .theme-amy .member-avatar-lg { background: linear-gradient(135deg, #db2777, #be185d); border: 2px solid #ec4899; }
 .theme-abdo .member-avatar-lg { background: linear-gradient(135deg, #ea580c, #c2410c); border: 2px solid #f97316; }
+.theme-vault .member-avatar-lg { background: linear-gradient(135deg, #ca8a04, #a16207); border: 2px solid #eab308; }
 
 .member-name-box h3 {
     font-size: 1.5rem;
@@ -1004,6 +1013,7 @@ body {
 .member-column-card.theme-mohamed { border-top: 4px solid #38bdf8; }
 .member-column-card.theme-amy { border-top: 4px solid #ec4899; }
 .member-column-card.theme-abdo { border-top: 4px solid #f97316; }
+.member-column-card.theme-vault { border-top: 4px solid #eab308; }
 
 .column-card-header {
     display: flex;
